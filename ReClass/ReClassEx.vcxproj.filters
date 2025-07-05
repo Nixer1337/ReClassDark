@@ -395,6 +395,9 @@
     <ClInclude Include="ClassDependencyGraph.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="DarkThemeManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -572,6 +575,9 @@
       <Filter>Source Files\Nodes</Filter>
     </ClCompile>
     <ClCompile Include="ClassDependencyGraph.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DarkThemeManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -20,6 +20,8 @@ BOOL CDialogAbout::OnInitDialog( )
 {
     CDialogEx::OnInitDialog( );
 
+    SetWindowDarkMode(GetSafeHwnd());
+
     CString strTemp;
     strTemp.Format( _T( "Build Date: %s - %s" ), _T( __DATE__ ), _T( __TIME__ ) );
     SetDlgItemText( IDC_ABOUT_BUILD_DATE, strTemp );

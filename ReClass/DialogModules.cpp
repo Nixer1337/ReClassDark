@@ -99,6 +99,7 @@ BOOL CDialogModules::OnInitDialog( )
 {
     CDialogEx::OnInitDialog( );
 
+    SetWindowDarkMode(GetSafeHwnd());
     SetIcon( NULL, TRUE );
     SetIcon( NULL, FALSE );
 

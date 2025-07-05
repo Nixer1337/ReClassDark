@@ -16,7 +16,7 @@ CProgressBar::CProgressBar( ) :
 
 CProgressBar::CProgressBar( LPCTSTR strMessage, int nSize /*=100*/,
     int MaxValue /*=100*/, BOOL bSmooth /*=FALSE*/,
-    int nPane /*=0*/, CStatusBar* pBar /*=NULL*/ ) :
+    int nPane /*=0*/, CMFCStatusBar* pBar /*=NULL*/ ) :
     m_pStatusBar( pBar )
 {
     Create( strMessage, nSize, MaxValue, bSmooth, nPane );
@@ -27,7 +27,7 @@ CProgressBar::~CProgressBar( )
     Clear( );
 }
 
-CStatusBar* CProgressBar::GetStatusBar( )
+CMFCStatusBar* CProgressBar::GetStatusBar( )
 {
     if (m_pStatusBar)
     {
@@ -43,11 +43,11 @@ CStatusBar* CProgressBar::GetStatusBar( )
         if (pMainWnd->IsKindOf( RUNTIME_CLASS( CFrameWnd ) ))
         {
             CWnd* pMessageBar = ((CFrameWnd*)pMainWnd)->GetMessageBar( );
-            return DYNAMIC_DOWNCAST( CStatusBar, pMessageBar );
+            return DYNAMIC_DOWNCAST( CMFCStatusBar, pMessageBar );
         }
         // otherwise traverse children to try and find the status bar...
         else
-            return DYNAMIC_DOWNCAST( CStatusBar,
+            return DYNAMIC_DOWNCAST( CMFCStatusBar,
                 pMainWnd->GetDescendantWindow( AFX_IDW_STATUS_BAR ) );
     }
 }
@@ -61,7 +61,7 @@ BOOL CProgressBar::Create( LPCTSTR strMessage, int nSize /*=100*/,
 {
     BOOL bSuccess = FALSE;
 
-    CStatusBar *pStatusBar = GetStatusBar( );
+    CMFCStatusBar *pStatusBar = GetStatusBar( );
     if (!pStatusBar)
         return FALSE;
 
@@ -123,7 +123,7 @@ void CProgressBar::Clear( )
         str = m_strPrevText;                   // Restore previous text
 
                                                // Place the IDLE_MESSAGE in the status bar 
-    CStatusBar *pStatusBar = GetStatusBar( );
+    CMFCStatusBar*pStatusBar = GetStatusBar( );
     if (pStatusBar)
     {
         pStatusBar->SetPaneText( m_nPane, str );
@@ -240,7 +240,7 @@ BOOL CProgressBar::Resize( )
     if (!IsWindow( GetSafeHwnd( ) ))
         return FALSE;
 
-    CStatusBar *pStatusBar = GetStatusBar( );
+    CMFCStatusBar* pStatusBar = GetStatusBar( );
     if (!pStatusBar)
         return FALSE;
 

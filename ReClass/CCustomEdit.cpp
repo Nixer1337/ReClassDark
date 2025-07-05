@@ -19,6 +19,7 @@ BOOL CCustomEdit::Create( DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UIN
 HBRUSH CCustomEdit::CtlColor( CDC* pDC, UINT nCtlColor )
 {
     pDC->SetBkColor( g_clrSelect );
+    pDC->SetTextColor( g_clrValue );
     return m_brBackGnd;
 }
 

@@ -147,6 +147,7 @@ BOOL CDialogEdit::OnInitDialog( )
 {
     CDialogEx::OnInitDialog( );
 
+    SetWindowDarkMode(GetSafeHwnd());
     ShowWindow( SW_HIDE );
 
     CWnd* pWnd = GetDesktopWindow( );

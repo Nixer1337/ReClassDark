@@ -58,6 +58,8 @@ BOOL CDialogClasses::OnInitDialog( )
 {
     CDialogEx::OnInitDialog( );
 
+    SetWindowDarkMode(GetSafeHwnd());
+
     m_ImageList.Create( GetSystemMetrics( SM_CXSMICON ), GetSystemMetrics( SM_CYSMICON ), ILC_COLOR32, 1, 1 );
     m_ImageList.SetBkColor( RGB( 255, 255, 255 ) );
     m_hClassIcon = ::LoadIcon( AfxGetResourceHandle( ), MAKEINTRESOURCE( IDI_ICON_CLASS ) );

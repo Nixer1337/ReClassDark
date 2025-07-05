@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <tlhelp32.h>
 
 #include "ReClassEx.h"
 
@@ -13,7 +14,9 @@
 #include "DialogModules.h"
 #include "DialogPlugins.h"
 #include "DialogAbout.h"
+#include "DarkThemeManager.h"
 
+#pragma comment(lib, "dwmapi.lib")
 
 // The one and only CReClassExApp object
 CReClassExApp g_ReClassApp;
@@ -39,6 +42,8 @@ BEGIN_MESSAGE_MAP( CReClassExApp, CWinAppEx )
     ON_COMMAND( ID_BUTTON_PAUSE, &CReClassExApp::OnButtonPause )
     ON_COMMAND( ID_BUTTON_RESUME, &CReClassExApp::OnButtonResume )
     ON_COMMAND( ID_BUTTON_KILL, &CReClassExApp::OnButtonKill )
+    ON_COMMAND(ID_BUTTON_REATTACH_PROC, &CReClassExApp::OnButtonReattachProc)
+    ON_UPDATE_COMMAND_UI(ID_BUTTON_REATTACH_PROC, &CReClassExApp::OnUpdateButtonReattachProc)
     ON_UPDATE_COMMAND_UI( ID_BUTTON_PAUSE, &CReClassExApp::OnUpdateButtonPause )
     ON_UPDATE_COMMAND_UI( ID_BUTTON_RESUME, &CReClassExApp::OnUpdateButtonResume )
     ON_UPDATE_COMMAND_UI( ID_BUTTON_KILL, &CReClassExApp::OnUpdateButtonKill )
@@ -49,6 +54,8 @@ BEGIN_MESSAGE_MAP( CReClassExApp, CWinAppEx )
     ON_COMMAND( ID_BUTTON_CLEAN, &CReClassExApp::OnButtonClean )
     ON_UPDATE_COMMAND_UI( ID_BUTTON_CLEAN, &CReClassExApp::OnUpdateButtonClean )
     ON_UPDATE_COMMAND_UI( ID_FILE_OPEN_PDB, &CReClassExApp::OnUpdateOpenPdb )
+    ON_COMMAND(ID_BUTTON_GITHUB_LINK, &CReClassExApp::OnButtonGithubLink)
+    ON_UPDATE_COMMAND_UI(ID_BUTTON_GITHUB_LINK, &CReClassExApp::OnUpdateButtonGithubLink)
 END_MESSAGE_MAP( )
 
 CReClassExApp::CReClassExApp( )
@@ -63,7 +70,6 @@ CReClassExApp::CReClassExApp( )
 
     g_FontWidth = FONT_DEFAULT_WIDTH;
     g_FontHeight = FONT_DEFAULT_HEIGHT;
-
 }
 
 void CReClassExApp::ResizeMemoryFont( int fontWidth, int fontHeight )
@@ -158,22 +164,6 @@ BOOL CReClassExApp::InitInstance( )
     g_Typedefs.Matrix   = GetProfileString( _T( "Typedefs" ), _T( "Matrix" ), _T( "matrix3x4_t" ) );
     g_Typedefs.PChar    = GetProfileString( _T( "Typedefs" ), _T( "PChar" ), _T( "char*" ) );
     g_Typedefs.PWChar   = GetProfileString( _T( "Typedefs" ), _T( "PWChar" ), _T( "wchar_t*" ) );
-
-    g_clrBackground     = GetProfileInt( _T( "Colors" ), _T( "Background" ), g_clrBackground );
-    g_clrSelect         = GetProfileInt( _T( "Colors" ), _T( "Select" ), g_clrSelect );
-    g_clrHidden         = GetProfileInt( _T( "Colors" ), _T( "Hidden" ), g_clrHidden );
-    g_clrOffset         = GetProfileInt( _T( "Colors" ), _T( "Offset" ), g_clrOffset );
-    g_clrAddress        = GetProfileInt( _T( "Colors" ), _T( "Address" ), g_clrAddress );
-    g_clrType           = GetProfileInt( _T( "Colors" ), _T( "Type" ), g_clrType );
-    g_clrName           = GetProfileInt( _T( "Colors" ), _T( "Name" ), g_clrName );
-    g_clrIndex          = GetProfileInt( _T( "Colors" ), _T( "Index" ), g_clrIndex );
-    g_clrValue          = GetProfileInt( _T( "Colors" ), _T( "Value" ), g_clrValue );
-    g_clrComment        = GetProfileInt( _T( "Colors" ), _T( "Comment" ), g_clrComment );
-    g_clrVTable			= GetProfileInt( _T( "Colors" ), _T( "VTable" ), g_clrVTable );
-    g_clrFunction		= GetProfileInt( _T( "Colors" ), _T( "Function" ), g_clrFunction );
-    g_clrChar           = GetProfileInt( _T( "Colors" ), _T( "Char" ), g_clrChar );
-    g_clrCustom			= GetProfileInt( _T( "Colors" ), _T( "Custom" ), g_clrCustom );
-    g_clrHex            = GetProfileInt( _T( "Colors" ), _T( "Hex" ), g_clrHex );
 
     g_bOffset           = GetProfileInt( _T( "Display" ), _T( "Offset" ), g_bOffset ) > 0 ? true : false;
     g_bAddress          = GetProfileInt( _T( "Display" ), _T( "Address" ), g_bAddress ) > 0 ? true : false;
@@ -274,6 +264,8 @@ BOOL CReClassExApp::InitInstance( )
     }
 
     LoadPlugins( );
+    OnButtonNewClass();
+    SetWindowDarkMode(AfxGetMainWnd()->GetSafeHwnd());
 
     return TRUE;
 }
@@ -340,22 +332,6 @@ int CReClassExApp::ExitInstance( )
     WriteProfileString( _T( "Typedefs" ),   _T( "PChar" ),  g_Typedefs.PChar );
     WriteProfileString( _T( "Typedefs" ),   _T( "PWChar" ), g_Typedefs.PWChar );
 
-    WriteProfileInt( _T( "Colors" ),    _T( "Background" ), g_clrBackground );
-    WriteProfileInt( _T( "Colors" ),    _T( "Select" ),     g_clrSelect );
-    WriteProfileInt( _T( "Colors" ),    _T( "Hidden" ),     g_clrHidden );
-    WriteProfileInt( _T( "Colors" ),    _T( "Offset" ),     g_clrOffset );
-    WriteProfileInt( _T( "Colors" ),    _T( "Address" ),    g_clrAddress );
-    WriteProfileInt( _T( "Colors" ),    _T( "Type" ),       g_clrType );
-    WriteProfileInt( _T( "Colors" ),    _T( "Name" ),       g_clrName );
-    WriteProfileInt( _T( "Colors" ),    _T( "Index" ),      g_clrIndex );
-    WriteProfileInt( _T( "Colors" ),    _T( "Value" ),      g_clrValue );
-    WriteProfileInt( _T( "Colors" ),    _T( "Comment" ),    g_clrComment );
-    WriteProfileInt( _T( "Colors" ),    _T( "VTable" ),     g_clrVTable );
-    WriteProfileInt( _T( "Colors" ),    _T( "Function" ),   g_clrFunction );
-    WriteProfileInt( _T( "Colors" ),    _T( "Char" ),       g_clrChar );
-    WriteProfileInt( _T( "Colors" ),    _T( "Custom" ),     g_clrCustom );
-    WriteProfileInt( _T( "Colors" ),    _T( "Hex" ),        g_clrHex );
-
     WriteProfileInt( _T( "Display" ),   _T( "Offset" ),     g_bOffset );
     WriteProfileInt( _T( "Display" ),   _T( "Address" ),    g_bAddress );
     WriteProfileInt( _T( "Display" ),   _T( "Text" ),       g_bText );
@@ -380,13 +356,53 @@ int CReClassExApp::ExitInstance( )
     return CWinAppEx::ExitInstance( );
 }
 
+void CReClassExApp::OnButtonReattachProc()
+{
+    if (!g_ProcessName.IsEmpty())
+    {
+        PROCESSENTRY32 entry;
+        entry.dwSize = sizeof(PROCESSENTRY32);
+
+        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+        if (Process32FirstW(snapshot, &entry) == TRUE)
+        {
+            while (Process32NextW(snapshot, &entry) == TRUE)
+            {
+                if (wcscmp(entry.szExeFile, g_ProcessName.GetString()) == 0)
+                {
+                    if (g_hProcess != NULL) // Stop leaking handles!
+                        CloseHandle(g_hProcess);
+
+                    g_hProcess = ReClassOpenProcess(PROCESS_ALL_ACCESS, FALSE, entry.th32ProcessID);
+                    g_ProcessID = entry.th32ProcessID;
+                    UpdateMemoryMap();
+                    break;
+                }
+            }
+        }
+
+        CloseHandle(snapshot);
+    }
+}
+
+void CReClassExApp::OnUpdateButtonReattachProc(CCmdUI* pCmdUI)
+{
+    pCmdUI->Enable(!g_ProcessName.IsEmpty());
+}
+
 void CReClassExApp::OnButtonReset( )
 {
-    CloseHandle( g_hProcess );
+    if (g_hProcess)
+        CloseHandle( g_hProcess );
 
     g_hProcess = NULL;
     g_ProcessID = 0;
     g_AttachedProcessAddress = NULL;
+    g_ProcessName.Empty();
+
+    CMFCRibbonButtonEx* reattach_button = static_cast<CMFCRibbonButtonEx*>(GetRibbonBar()->FindByID(ID_BUTTON_REATTACH_PROC));
+    reattach_button->ResetIcon();
 
     CMDIFrameWnd* pFrame = STATIC_DOWNCAST( CMDIFrameWnd, m_pMainWnd );
     CMDIChildWnd* pChildWnd = pFrame->MDIGetActive( );
@@ -404,6 +420,8 @@ void CReClassExApp::OnButtonReset( )
     m_strFooter = _T( "" );
     m_strNotes = _T( "" );
     m_strCurrentFilePath = _T("");
+
+    OnButtonNewClass();
 }
 
 void CReClassExApp::OnButtonPause( )
@@ -703,9 +721,9 @@ CMFCRibbonBar* CReClassExApp::GetRibbonBar( )
     return (CMFCRibbonBar*)&GetMainFrame( )->m_RibbonBar;
 }
 
-CStatusBar* CReClassExApp::GetStatusBar( )
+CMFCStatusBar* CReClassExApp::GetStatusBar( )
 {
-    return (CStatusBar*)&GetMainFrame( )->m_StatusBar;
+    return (CMFCStatusBar*)&GetMainFrame( )->m_StatusBar;
 }
 
 CNodeBase* CReClassExApp::CreateNewNode( NodeType Type )
@@ -1764,3 +1782,12 @@ void CReClassExApp::OnUpdateButtonClean( CCmdUI *pCmdUI )
     pCmdUI->Enable( (g_ReClassApp.m_Classes.size( ) > 0) );
 }
 
+void CReClassExApp::OnButtonGithubLink()
+{
+    ShellExecuteW(NULL, L"open", L"https://github.com/Nixer1337/ReClassDark", NULL, NULL, SW_SHOWNORMAL);
+}
+
+void CReClassExApp::OnUpdateButtonGithubLink(CCmdUI* pCmdUI)
+{
+    pCmdUI->Enable( TRUE );
+}

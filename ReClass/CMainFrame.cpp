@@ -9,6 +9,8 @@
 #include "DialogProcSelect.h"
 #include "DialogTypes.h"
 
+#include "DarkThemeManager.h"
+
 UINT BASED_CODE CMainFrame::s_StatusBarPanes[2] = { 
     ID_STATUSBAR_PANE1,
     ID_STATUSBAR_PANE2
@@ -23,24 +25,7 @@ BEGIN_MESSAGE_MAP( CMainFrame, CMDIFrameWndEx )
     ON_WM_SIZE( )
     ON_WM_SETTINGCHANGE( )
     ON_COMMAND( ID_WINDOW_MANAGER, &CMainFrame::OnWindowManager )
-    ON_COMMAND_RANGE( ID_VIEW_APPLOOK_WIN_2000, ID_VIEW_APPLOOK_WINDOWS_7, &CMainFrame::OnApplicationLook )
-    ON_UPDATE_COMMAND_UI_RANGE( ID_VIEW_APPLOOK_WIN_2000, ID_VIEW_APPLOOK_WINDOWS_7, &CMainFrame::OnUpdateApplicationLook )
     //ON_COMMAND(ID_BUTTON_SHOWCLASSES, &CMainFrame::OnButtonShowclasses)
-    ON_COMMAND( ID_BUTTON_CLR_BACKGROUND, &CMainFrame::OnButtonClrBackground )
-    ON_COMMAND( ID_BUTTON_CLR_SELECT, &CMainFrame::OnButtonClrSelect )
-    ON_COMMAND( ID_BUTTON_CLR_HIDDEN, &CMainFrame::OnButtonClrHidden )
-    ON_COMMAND( ID_BUTTON_CLR_OFFSET, &CMainFrame::OnButtonClrOffset )
-    ON_COMMAND( ID_BUTTON_CLR_ADDRESS, &CMainFrame::OnButtonClrAddress )
-    ON_COMMAND( ID_BUTTON_CLR_HEX, &CMainFrame::OnButtonClrHex )
-    ON_COMMAND( ID_BUTTON_CLR_TYPE, &CMainFrame::OnButtonClrType )
-    ON_COMMAND( ID_BUTTON_CLR_NAME, &CMainFrame::OnButtonClrName )
-    ON_COMMAND( ID_BUTTON_CLR_VALUE, &CMainFrame::OnButtonClrValue )
-    ON_COMMAND( ID_BUTTON_CLR_INDEX, &CMainFrame::OnButtonClrIndex )
-    ON_COMMAND( ID_BUTTON_CLR_COMMENT, &CMainFrame::OnButtonClrComment )
-    ON_COMMAND( ID_BUTTON_CLR_TEXT, &CMainFrame::OnButtonClrText )
-    ON_COMMAND( ID_BUTTON_CLR_VTABLE, &CMainFrame::OnButtonClrVtable )
-    ON_COMMAND( ID_BUTTON_CLR_FUNCTION, &CMainFrame::OnButtonClrFunction )
-    ON_COMMAND( ID_BUTTON_CLR_CUSTOM, &CMainFrame::OnButtonClrCustom )
     ON_COMMAND( ID_CHECK_ADDRESS, &CMainFrame::OnCheckAddress )
     ON_UPDATE_COMMAND_UI( ID_CHECK_ADDRESS, &CMainFrame::OnUpdateCheckAddress )
     ON_COMMAND( ID_CHECK_OFFSET, &CMainFrame::OnCheckOffset )
@@ -83,8 +68,6 @@ END_MESSAGE_MAP( )
 // CMainFrame construction/destruction
 CMainFrame::CMainFrame( )
 {
-    // TODO: Add member initialization code here
-    g_ReClassApp.m_nAppLook = g_ReClassApp.GetInt( _T( "ApplicationLook" ), ID_VIEW_APPLOOK_OFF_2007_BLACK );
 }
 
 CMainFrame::~CMainFrame( )
@@ -97,11 +80,6 @@ int CMainFrame::OnCreate( LPCREATESTRUCT lpCreateStruct )
         return -1;
 
     //
-    // Set the visual manager and style based on persisted value
-    //
-    OnApplicationLook( g_ReClassApp.m_nAppLook );
-
-    //
     // Create tabs
     //
     CMDITabInfo MdiTabParams;
@@ -111,7 +89,7 @@ int CMainFrame::OnCreate( LPCREATESTRUCT lpCreateStruct )
     MdiTabParams.m_bTabCloseButton = TRUE;
     MdiTabParams.m_nTabBorderSize = 2;
     MdiTabParams.m_bTabIcons = FALSE;
-    MdiTabParams.m_bAutoColor = TRUE;
+    MdiTabParams.m_bAutoColor = FALSE;
     MdiTabParams.m_bDocumentMenu = TRUE;
     MdiTabParams.m_bEnableTabSwap = TRUE;
     MdiTabParams.m_bFlatFrame = TRUE;
@@ -130,6 +108,8 @@ int CMainFrame::OnCreate( LPCREATESTRUCT lpCreateStruct )
     m_StatusBar.SetIndicators( s_StatusBarPanes, 2 );
     m_StatusBar.SetPaneInfo( 0, ID_STATUSBAR_PANE1, SBPS_NORMAL, 0 );
     m_StatusBar.SetPaneInfo( 1, ID_STATUSBAR_PANE2, SBPS_STRETCH, 0 );
+    m_StatusBar.SetPaneBackgroundColor(0, RGB(31, 31, 31));
+    m_StatusBar.SetPaneBackgroundColor(1, RGB(31, 31, 31));
 
     //
     // Enable Visual Studio 2005 style docking window behavior
@@ -171,28 +151,9 @@ int CMainFrame::OnCreate( LPCREATESTRUCT lpCreateStruct )
     //
     ModifyStyle( 0, FWS_PREFIXTITLE );
 
-    //
-    // Update Colors
-    //
-    CMFCRibbonColorButton* Color;
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_BACKGROUND ));  Color->SetColor( g_clrBackground );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_SELECT ));      Color->SetColor( g_clrSelect );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_HIDDEN ));      Color->SetColor( g_clrHidden );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_OFFSET ));      Color->SetColor( g_clrOffset );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_ADDRESS ));     Color->SetColor( g_clrAddress );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_TYPE ));        Color->SetColor( g_clrType );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_NAME ));        Color->SetColor( g_clrName );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_INDEX ));       Color->SetColor( g_clrIndex );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_VALUE ));       Color->SetColor( g_clrValue );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_COMMENT ));     Color->SetColor( g_clrComment );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_VTABLE ));      Color->SetColor( g_clrVTable );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_FUNCTION ));    Color->SetColor( g_clrFunction );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_TEXT ));        Color->SetColor( g_clrChar );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_CUSTOM ));      Color->SetColor( g_clrCustom );
-    Color = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_HEX ));         Color->SetColor( g_clrHex );
-
-    
     SetTimer( TIMER_MEMORYMAP_UPDATE, 30, NULL );
+
+    CMFCVisualManager::SetDefaultManager(RUNTIME_CLASS(CMFCDarkThemeManager));
 
     return 0;
 }
@@ -205,67 +166,6 @@ void CMainFrame::OnSize( UINT nType, int cx, int cy )
 
     if (m_StatusBar.GetSafeHwnd( ) && cx > 250)
         m_StatusBar.SetPaneInfo( 0, ID_STATUSBAR_PANE1, SBPS_NORMAL, cx - 250 );
-}
-
-void CMainFrame::OnButtonClrBackground( )
-{
-    g_clrBackground = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_BACKGROUND ))->GetColor( );
-}
-void CMainFrame::OnButtonClrSelect( )
-{
-    g_clrSelect = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_SELECT ))->GetColor( );
-}
-void CMainFrame::OnButtonClrHidden( )
-{
-    g_clrHidden = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_HIDDEN ))->GetColor( );
-}
-void CMainFrame::OnButtonClrOffset( )
-{
-    g_clrOffset = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_OFFSET ))->GetColor( );
-}
-void CMainFrame::OnButtonClrAddress( )
-{
-    g_clrAddress = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_ADDRESS ))->GetColor( );
-}
-void CMainFrame::OnButtonClrHex( )
-{
-    g_clrHex = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_HEX ))->GetColor( );
-}
-void CMainFrame::OnButtonClrType( )
-{
-    g_clrType = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_TYPE ))->GetColor( );
-}
-void CMainFrame::OnButtonClrName( )
-{
-    g_clrName = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_NAME ))->GetColor( );
-}
-void CMainFrame::OnButtonClrValue( )
-{
-    g_clrValue = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_VALUE ))->GetColor( );
-}
-void CMainFrame::OnButtonClrIndex( )
-{
-    g_clrIndex = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_INDEX ))->GetColor( );
-}
-void CMainFrame::OnButtonClrComment( )
-{
-    g_clrComment = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_COMMENT ))->GetColor( );
-}
-void CMainFrame::OnButtonClrText( )
-{
-    g_clrChar = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_TEXT ))->GetColor( );
-}
-void CMainFrame::OnButtonClrVtable( )
-{
-    g_clrVTable = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_VTABLE ))->GetColor( );
-}
-void CMainFrame::OnButtonClrFunction( )
-{
-    g_clrFunction = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_FUNCTION ))->GetColor( );
-}
-void CMainFrame::OnButtonClrCustom( )
-{
-    g_clrCustom = static_cast<CMFCRibbonColorButton*>(m_RibbonBar.FindByID( ID_BUTTON_CLR_CUSTOM ))->GetColor( );
 }
 
 BOOL CMainFrame::PreCreateWindow( CREATESTRUCT& cs )
@@ -308,104 +208,6 @@ void CMainFrame::Dump( CDumpContext& dc ) const
 void CMainFrame::OnWindowManager( )
 {
     ShowWindowsDialog( );
-}
-
-void CMainFrame::OnApplicationLook( UINT id )
-{
-    g_ReClassApp.m_nAppLook = id;
-    switch (g_ReClassApp.m_nAppLook)
-    {
-
-    case ID_VIEW_APPLOOK_WIN_2000:
-    {
-        CMFCVisualManager::SetDefaultManager( RUNTIME_CLASS( CMFCVisualManager ) );
-        m_RibbonBar.SetWindows7Look( FALSE );
-    }
-    break;
-
-    case ID_VIEW_APPLOOK_OFF_XP:
-    {
-        CMFCVisualManager::SetDefaultManager( RUNTIME_CLASS( CMFCVisualManagerOfficeXP ) );
-        m_RibbonBar.SetWindows7Look( FALSE );
-    }
-    break;
-
-    case ID_VIEW_APPLOOK_WIN_XP:
-    {
-        CMFCVisualManagerWindows::m_b3DTabsXPTheme = TRUE;
-        CMFCVisualManager::SetDefaultManager( RUNTIME_CLASS( CMFCVisualManagerWindows ) );
-        m_RibbonBar.SetWindows7Look( FALSE );
-    }
-    break;
-
-    case ID_VIEW_APPLOOK_OFF_2003:
-    {
-        CMFCVisualManager::SetDefaultManager( RUNTIME_CLASS( CMFCVisualManagerOffice2003 ) );
-        CDockingManager::SetDockingMode( DT_SMART );
-        m_RibbonBar.SetWindows7Look( FALSE );
-    }
-    break;
-
-    case ID_VIEW_APPLOOK_VS_2005:
-    {
-        CMFCVisualManager::SetDefaultManager( RUNTIME_CLASS( CMFCVisualManagerVS2005 ) );
-        CDockingManager::SetDockingMode( DT_SMART );
-        m_RibbonBar.SetWindows7Look( FALSE );
-    }
-    break;
-
-    case ID_VIEW_APPLOOK_VS_2008:
-    {
-        CMFCVisualManager::SetDefaultManager( RUNTIME_CLASS( CMFCVisualManagerVS2008 ) );
-        CDockingManager::SetDockingMode( DT_SMART );
-        m_RibbonBar.SetWindows7Look( FALSE );
-    }
-    break;
-
-    case ID_VIEW_APPLOOK_WINDOWS_7:
-    {
-        CMFCVisualManager::SetDefaultManager( RUNTIME_CLASS( CMFCVisualManagerWindows7 ) );
-        CDockingManager::SetDockingMode( DT_SMART );
-        m_RibbonBar.SetWindows7Look( TRUE );
-    }
-    break;
-
-    default:
-    {
-        switch (g_ReClassApp.m_nAppLook)
-        {
-        case ID_VIEW_APPLOOK_OFF_2007_BLUE:
-            CMFCVisualManagerOffice2007::SetStyle( CMFCVisualManagerOffice2007::Office2007_LunaBlue );
-            break;
-
-        case ID_VIEW_APPLOOK_OFF_2007_BLACK:
-            CMFCVisualManagerOffice2007::SetStyle( CMFCVisualManagerOffice2007::Office2007_ObsidianBlack );
-            break;
-
-        case ID_VIEW_APPLOOK_OFF_2007_SILVER:
-            CMFCVisualManagerOffice2007::SetStyle( CMFCVisualManagerOffice2007::Office2007_Silver );
-            break;
-
-        case ID_VIEW_APPLOOK_OFF_2007_AQUA:
-            CMFCVisualManagerOffice2007::SetStyle( CMFCVisualManagerOffice2007::Office2007_Aqua );
-            break;
-        }
-
-        CMFCVisualManager::SetDefaultManager( RUNTIME_CLASS( CMFCVisualManagerOffice2007 ) );
-        CDockingManager::SetDockingMode( DT_SMART );
-        m_RibbonBar.SetWindows7Look( FALSE );
-    }
-    break;
-
-    }
-
-    RedrawWindow( NULL, NULL, RDW_ALLCHILDREN | RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME | RDW_ERASE );
-    g_ReClassApp.WriteInt( _T( "ApplicationLook" ), g_ReClassApp.m_nAppLook );
-}
-
-void CMainFrame::OnUpdateApplicationLook( CCmdUI* pCmdUI )
-{
-    pCmdUI->SetRadio( g_ReClassApp.m_nAppLook == pCmdUI->m_nID );
 }
 
 void CMainFrame::OnSettingChange( UINT uFlags, LPCTSTR lpszSection )
@@ -759,4 +561,3 @@ void CMainFrame::OnUpdateCheckUnsignedHex( CCmdUI *pCmdUI )
 {
     pCmdUI->SetCheck( g_bUnsignedHex );
 }
-

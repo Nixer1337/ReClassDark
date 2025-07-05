@@ -1,3 +1,14 @@
+# ReClassDark
+
+Dark version of ReClassEx with some fixes
+
+![ReClassDark](https://raw.githubusercontent.com/Nixer1337/ReClassDark/master/Images/ReClassDark.png "ReClassDark")
+
+## What's new
+- Dark version reskin
+- Added process reattach button
+- Fixed zeroing class when ReadProcessMemory can't read full buffer size
+
 # ReClassEx
 
 ReClass Extended

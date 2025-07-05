@@ -42,24 +42,24 @@ std::vector<AddressName>            g_CustomNames;
 
 std::vector<HICON> g_Icons;
 
-COLORREF g_clrBackground = RGB( 255, 255, 255 );
-COLORREF g_clrSelect = RGB( 240, 240, 240 );
-COLORREF g_clrHidden = RGB( 240, 240, 240 );
+COLORREF g_clrBackground = RGB(30, 30, 30);         // dark background
+COLORREF g_clrSelect = RGB(45, 45, 48);         // VS selection background
+COLORREF g_clrHidden = RGB(30, 30, 30);         // same as background
 
-COLORREF g_clrOffset = RGB( 255, 0, 0 );
-COLORREF g_clrAddress = RGB( 0, 200, 0 );
-COLORREF g_clrType = RGB( 0, 0, 255 );
-COLORREF g_clrName = RGB( 32, 32, 128 );
-COLORREF g_clrIndex = RGB( 32, 200, 200 );
-COLORREF g_clrValue = RGB( 255, 128, 0 );
-COLORREF g_clrComment = RGB( 0, 200, 0 );
+COLORREF g_clrOffset = RGB(255, 128, 128);      // reddish (addresses, e.g., line numbers)
+COLORREF g_clrAddress = RGB(220, 220, 220);      // neutral gray (default text color)
+COLORREF g_clrType = RGB(86, 156, 214);       // blue (types)
+COLORREF g_clrName = RGB(156, 220, 254);      // cyan (variable names)
+COLORREF g_clrIndex = RGB(78, 201, 176);       // teal (indexes, array access)
+COLORREF g_clrValue = RGB(206, 145, 120);      // salmon (constants, numbers)
+COLORREF g_clrComment = RGB(87, 166, 74);        // green (comments)
 
-COLORREF g_clrVTable = RGB( 0, 255, 0 );
-COLORREF g_clrFunction = RGB( 255, 0, 255 );
-COLORREF g_clrChar = RGB( 0, 0, 255 );
-COLORREF g_clrBits = RGB( 0, 0, 255 );
-COLORREF g_clrCustom = RGB( 64, 128, 64 );
-COLORREF g_clrHex = RGB( 0, 0, 0 );
+COLORREF g_clrVTable = RGB(181, 206, 168);      // light green (special types)
+COLORREF g_clrFunction = RGB(220, 220, 170);      // yellowish (functions)
+COLORREF g_clrChar = RGB(206, 145, 120);      // same as value (char literal)
+COLORREF g_clrBits = RGB(204, 204, 255);      // pale purple (bitfield-like)
+COLORREF g_clrCustom = RGB(128, 203, 196);      // teal (custom fields)
+COLORREF g_clrHex = RGB(192, 192, 192);      // light gray (hex dump)
 
 CString g_ViewFontName;
 CFont g_ViewFont;
@@ -97,8 +97,9 @@ BOOL ReClassReadMemory( LPVOID Address, LPVOID Buffer, SIZE_T Size, PSIZE_T Byte
     if (g_PluginOverrideReadMemoryOperation != NULL)
         return g_PluginOverrideReadMemoryOperation( Address, Buffer, Size, BytesRead );
 
+    SecureZeroMemory(Buffer, Size);
     BOOL return_val = ReadProcessMemory( g_hProcess, (LPVOID)Address, Buffer, Size, BytesRead );
-    if (!return_val) SecureZeroMemory( Buffer, Size );
+    //if (!return_val) SecureZeroMemory( Buffer, Size );
     return return_val;
 }
 
@@ -989,4 +990,10 @@ ULONG_PTR ConvertStrToAddress( CString str )
     }
 
     return Final;
+}
+
+void SetWindowDarkMode(HWND hwnd)
+{
+    BOOL value = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
 }

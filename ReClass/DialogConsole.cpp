@@ -116,6 +116,7 @@ BOOL CDialogConsole::OnInitDialog( )
 {
     CDialogEx::OnInitDialog( );
 
+    SetWindowDarkMode(GetSafeHwnd());
     CenterWindow( GetDesktopWindow( ) );
     SetWindowText( m_strWindowTitle );
 

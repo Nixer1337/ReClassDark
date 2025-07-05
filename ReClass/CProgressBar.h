@@ -7,7 +7,7 @@ class CProgressBar : public CProgressCtrl
 public:
     CProgressBar( );
     CProgressBar( LPCTSTR strMessage, int nSize = 100, int MaxValue = 100,
-        BOOL bSmooth = FALSE, int nPane = 0, CStatusBar* pBar = NULL );
+        BOOL bSmooth = FALSE, int nPane = 0, CMFCStatusBar* pBar = NULL );
     ~CProgressBar( );
     BOOL Create( LPCTSTR strMessage, int nSize = 100, int MaxValue = 100,
         BOOL bSmooth = FALSE, int nPane = 0 );
@@ -35,7 +35,7 @@ protected:
 
     // implementation
 protected:
-    CStatusBar *GetStatusBar( );
+    CMFCStatusBar *GetStatusBar( );
     BOOL Resize( );
 
     int		m_nSize;		// Percentage size of control
@@ -43,5 +43,5 @@ protected:
     CString	m_strMessage;	// Message to display to left of control
     CString m_strPrevText;  // Previous text in status bar
     CRect	m_Rect;			// Dimensions of the whole thing
-    CStatusBar* m_pStatusBar; // Set in the ctor to explicitly state which status bar to use.
+    CMFCStatusBar* m_pStatusBar; // Set in the ctor to explicitly state which status bar to use.
 };

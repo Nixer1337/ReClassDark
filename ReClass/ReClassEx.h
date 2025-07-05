@@ -39,7 +39,7 @@ public:
 // Implementation
     class CMainFrame* GetMainFrame( );
     class CMFCRibbonBar* GetRibbonBar( );
-    class CStatusBar* GetStatusBar( );
+    class CMFCStatusBar* GetStatusBar( );
 
     CNodeBase* CreateNewNode( NodeType Type );
     bool IsNodeValid( CNodeBase* pCheckNode );
@@ -56,7 +56,6 @@ public:
     HMENU  m_hMdiMenu;
     HACCEL m_hMdiAccel;
 
-    UINT  m_nAppLook;
     BOOL  m_bHiColorIcons;
 
     void ResizeMemoryFont( int font_width, int font_height );
@@ -67,6 +66,8 @@ public:
 
     DECLARE_MESSAGE_MAP( )
 
+    afx_msg void OnButtonReattachProc();
+    afx_msg void OnUpdateButtonReattachProc(CCmdUI* pCmdUI);
     afx_msg void OnButtonReset( );
     afx_msg void OnAppAbout( );
     afx_msg void OnFileNew( );
@@ -98,4 +99,6 @@ public:
     afx_msg void OnUpdateButtonPlugins( CCmdUI *pCmdUI );
     afx_msg void OnOpenPdb( );
     afx_msg void OnUpdateOpenPdb( CCmdUI *pCmdUI );
+    afx_msg void OnButtonGithubLink();
+    afx_msg void OnUpdateButtonGithubLink(CCmdUI* pCmdUI);
 };

@@ -169,6 +169,9 @@ BOOL CDialogProcSelect::OnInitDialog( )
     if (!g_bSymbolResolution)
         m_LoadAllSymbols.EnableWindow( FALSE );
 
+    //SetBackgroundColor(g_clrBackground);
+    SetWindowDarkMode(GetSafeHwnd());
+
     GetWindowRect( &m_OriginalSize );
     ScreenToClient( &m_OriginalSize );
     m_ProcessList.SetExtendedStyle( LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER );
@@ -275,6 +278,15 @@ void CDialogProcSelect::OnAttachButton( )
 
                 g_hProcess = ProcessHandle;
                 g_ProcessID = FoundProcessInfo->dwProcessId;
+
+                CMFCRibbonButtonEx* reattach_button = static_cast<CMFCRibbonButtonEx*>(g_ReClassApp.GetRibbonBar()->FindByID(ID_BUTTON_REATTACH_PROC));
+
+                SHFILEINFOW sfi = { 0 };
+                TCHAR tcsProcessPath[MAX_PATH] = { 0 };
+                GetModuleFileNameEx(ProcessHandle, NULL, tcsProcessPath, MAX_PATH);
+                if (SHGetFileInfoW(tcsProcessPath, 0, &sfi, sizeof(SHFILEINFOW), SHGFI_ICON | SHGFI_LARGEICON))
+                    reattach_button->SetIcon(sfi.hIcon);               
+
                 g_ProcessName = FoundProcessInfo->strProcessName;
 
                 UpdateMemoryMap( );
@@ -284,7 +296,7 @@ void CDialogProcSelect::OnAttachButton( )
                     OnClose( );
                 
                     MSG Msg;
-                    CStatusBar* StatusBar = g_ReClassApp.GetStatusBar( );
+                    CMFCStatusBar* StatusBar = g_ReClassApp.GetStatusBar( );
 
                     CProgressBar ProgressBar( _T( "Progress" ), 100, 100, TRUE, 0, StatusBar );
                     ProgressBar.SetStep( 1 );

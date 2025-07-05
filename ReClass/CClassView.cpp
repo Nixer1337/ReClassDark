@@ -23,6 +23,7 @@ CClassView::~CClassView( )
 
 BEGIN_MESSAGE_MAP( CClassView, CWnd )
     ON_WM_PAINT( )
+    //ON_WM_NCPAINT( )
     ON_WM_KEYDOWN( )
     ON_WM_LBUTTONDBLCLK( )
     ON_WM_CREATE( )
@@ -145,13 +146,25 @@ END_MESSAGE_MAP( )
 
 #define SB_WIDTH 14
 
+void CClassView::UpdateHorisontalScroll(bool vertical_scroll_visible)
+{
+    CRect client;
+    GetClientRect(&client);
+
+    int hscroll_width = client.Width();
+    if (vertical_scroll_visible)
+        hscroll_width -= SB_WIDTH;
+
+    m_HScroll.SetWindowPos(NULL, client.left, client.bottom - SB_WIDTH, hscroll_width, SB_WIDTH, SWP_NOZORDER);
+}
+
 // CChildView message handlers
 BOOL CClassView::PreCreateWindow( CREATESTRUCT& cs )
 {
     if (!CWnd::PreCreateWindow( cs ))
         return FALSE;
 
-    cs.dwExStyle |= WS_EX_STATICEDGE;
+    //cs.dwExStyle |= WS_EX_STATICEDGE;
     cs.style &= ~WS_BORDER;
     cs.lpszClass = AfxRegisterWndClass( CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS, ::LoadCursor( NULL, IDC_ARROW ), (HBRUSH)COLOR_WINDOWFRAME, NULL );
 
@@ -176,15 +189,16 @@ int CClassView::OnCreate( LPCREATESTRUCT lpCreateStruct )
 
     m_Scroll.Create( SBS_VERT, rect, this, 0 );
     m_Scroll.EnableScrollBar( ESB_ENABLE_BOTH );
-    m_Scroll.ShowScrollBar( );
 
     m_HScroll.Create( SBS_HORZ, hrect, this, 0 );
     m_HScroll.EnableScrollBar( ESB_ENABLE_BOTH );
-    m_HScroll.ShowScrollBar( );
 
     m_ToolTip.Create( ES_MULTILINE | WS_BORDER, rect, this, 1 );
     m_ToolTip.SetFont( &g_ViewFont );
     m_ToolTip.EnableWindow( FALSE );
+
+    SetWindowTheme(m_Scroll.GetSafeHwnd(), L"DarkMode_Explorer", nullptr);
+    SetWindowTheme(m_HScroll.GetSafeHwnd(), L"DarkMode_Explorer", nullptr);
 
     SetTimer( 1, 250, NULL );
 
@@ -798,11 +812,13 @@ void CClassView::OnPaint( )
             ScrollInfo.nPage = ClientRect.Height( ) / g_FontHeight;
             m_Scroll.SetScrollInfo( &ScrollInfo );
             m_Scroll.ShowScrollBar( TRUE );
+            UpdateHorisontalScroll(true);
         }
         else
         {
             m_Scroll.SetScrollPos( 0 );
             m_Scroll.ShowScrollBar( FALSE );
+            UpdateHorisontalScroll(false);
         }
 
         if (ClientRect.Width( ) < DrawMax.x)
@@ -848,8 +864,10 @@ void CClassView::OnSize( UINT nType, int cx, int cy )
 {
     CRect client;
     GetClientRect( &client );
-    m_Scroll.SetWindowPos( NULL, client.right - SB_WIDTH, 0, SB_WIDTH, client.Height( ) - SB_WIDTH, SWP_NOZORDER );
-    m_HScroll.SetWindowPos( NULL, client.left, client.bottom - SB_WIDTH * 2, client.Width( ) - SB_WIDTH, SB_WIDTH, SWP_NOZORDER );
+    m_Scroll.SetWindowPos( NULL, client.right - SB_WIDTH, 0, SB_WIDTH, client.Height( ), SWP_NOZORDER );
+
+    UpdateHorisontalScroll(m_Scroll.IsWindowVisible());
+
     m_Edit.ShowWindow( SW_HIDE );
 
     CWnd::OnSize( nType, cx, cy );

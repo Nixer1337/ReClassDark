@@ -248,6 +248,23 @@ CStringW ReadMemoryStringW( ULONG_PTR address, SIZE_T max = 40 );
 int SplitString( const CString& input, const CString& delimiter, CStringArray& results );
 ULONG_PTR ConvertStrToAddress( CString str );
 
+void SetWindowDarkMode(HWND hwnd);
+
+class CMFCRibbonButtonEx : public CMFCRibbonButton
+{
+public:
+    void SetIcon(HICON icon)
+    {
+        m_hIcon = icon;
+        m_hIconSmall = icon;
+    }
+
+    void ResetIcon()
+    {
+        m_hIcon = nullptr;
+        m_hIconSmall = nullptr;
+    }
+};
 
 // 
 // Classes & Structs

@@ -16,6 +16,7 @@ public:
 
     // Overrides
 protected:
+    void UpdateHorisontalScroll(bool vertical_scroll_visible);
     virtual BOOL PreCreateWindow( CREATESTRUCT& cs );
 
     // Implementation

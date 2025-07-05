@@ -36,16 +36,13 @@ public:  // control bar embedded members
     CMFCToolBarImages m_PanelImages;
 
     static UINT BASED_CODE s_StatusBarPanes[2];
-    CStatusBar m_StatusBar;
-
+    CMFCStatusBar m_StatusBar;
 
 // Generated message map functions
 protected:
     afx_msg int OnCreate( LPCREATESTRUCT lpCreateStruct );
     afx_msg void OnSize( UINT nType, int cx, int cy );
     afx_msg void OnWindowManager( );
-    afx_msg void OnApplicationLook( UINT id );
-    afx_msg void OnUpdateApplicationLook( CCmdUI* pCmdUI );
     afx_msg void OnSettingChange( UINT uFlags, LPCTSTR lpszSection );
     DECLARE_MESSAGE_MAP( )
 
@@ -55,21 +52,6 @@ protected:
 public:
     //afx_msg void OnButtonShowclasses();
     virtual BOOL OnCmdMsg( UINT nID, int nCode, void* pExtra, AFX_CMDHANDLERINFO* pHandlerInfo );
-    afx_msg void OnButtonClrBackground( );
-    afx_msg void OnButtonClrSelect( );
-    afx_msg void OnButtonClrHidden( );
-    afx_msg void OnButtonClrOffset( );
-    afx_msg void OnButtonClrAddress( );
-    afx_msg void OnButtonClrHex( );
-    afx_msg void OnButtonClrType( );
-    afx_msg void OnButtonClrName( );
-    afx_msg void OnButtonClrValue( );
-    afx_msg void OnButtonClrIndex( );
-    afx_msg void OnButtonClrComment( );
-    afx_msg void OnButtonClrText( );
-    afx_msg void OnButtonClrVtable( );
-    afx_msg void OnButtonClrFunction( );
-    afx_msg void OnButtonClrCustom( );
     afx_msg void OnCheckAddress( );
     afx_msg void OnUpdateCheckAddress( CCmdUI *pCmdUI );
     afx_msg void OnCheckOffset( );
@@ -108,5 +90,3 @@ public:
     afx_msg void OnCheckUnsignedHex( );
     afx_msg void OnUpdateCheckUnsignedHex( CCmdUI *pCmdUI );
 };
-
-
