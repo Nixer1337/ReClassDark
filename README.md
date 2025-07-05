@@ -7,7 +7,7 @@ Dark version of ReClassEx with some fixes
 ## What's new
 - Dark version reskin
 - Added process reattach button
-- Fixed zeroing class when ReadProcessMemory can't read full buffer size
+- Fixed zeroing of the class when ReadProcessMemory can't read full buffer size
 
 # ReClassEx
 
