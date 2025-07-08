@@ -279,15 +279,15 @@ void CDialogProcSelect::OnAttachButton( )
                 g_hProcess = ProcessHandle;
                 g_ProcessID = FoundProcessInfo->dwProcessId;
 
-                CMFCRibbonButtonEx* reattach_button = static_cast<CMFCRibbonButtonEx*>(g_ReClassApp.GetRibbonBar()->FindByID(ID_BUTTON_REATTACH_PROC));
-
-                SHFILEINFOW sfi = { 0 };
                 TCHAR tcsProcessPath[MAX_PATH] = { 0 };
                 GetModuleFileNameEx(ProcessHandle, NULL, tcsProcessPath, MAX_PATH);
-                if (SHGetFileInfoW(tcsProcessPath, 0, &sfi, sizeof(SHFILEINFOW), SHGFI_ICON | SHGFI_LARGEICON))
-                    reattach_button->SetIcon(sfi.hIcon);               
 
                 g_ProcessName = FoundProcessInfo->strProcessName;
+                g_ProcessPath = tcsProcessPath;
+                g_ReClassApp.WriteProfileString(_T("Misc"), _T("ProcessName"), g_ProcessName);
+                g_ReClassApp.WriteProfileString(_T("Misc"), _T("ProcessPath"), g_ProcessPath);
+
+                CReattachButton::UpdateIcon();
 
                 UpdateMemoryMap( );
 

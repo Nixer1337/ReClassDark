@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <Psapi.h>
+#include <tlhelp32.h>
 
 //Globals
 HANDLE g_hProcess = NULL;
@@ -9,6 +10,53 @@ DWORD g_ProcessID = NULL;
 ULONG_PTR g_AttachedProcessAddress = NULL;
 DWORD g_AttachedProcessSize = NULL;
 CString g_ProcessName;
+CString g_ProcessPath;
+
+bool IsProcessExists()
+{
+    if (g_ProcessName.IsEmpty()) return false;
+
+    PROCESSENTRY32 entry;
+    entry.dwSize = sizeof(PROCESSENTRY32);
+
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+    if (Process32FirstW(snapshot, &entry) == TRUE)
+    {
+        while (Process32NextW(snapshot, &entry) == TRUE)
+        {
+            if (wcscmp(entry.szExeFile, g_ProcessName.GetString()) == 0)
+            {
+                CloseHandle(snapshot);
+                return true;
+            }
+        }
+    }
+
+    CloseHandle(snapshot);
+    return false;
+}
+
+void CReattachButton::UpdateIcon()
+{
+    if (g_ProcessPath.IsEmpty() || !IsProcessExists())
+    {
+        ResetIcon();
+        return;
+    }
+    CReattachButton* reattach_button = static_cast<CReattachButton*>(g_ReClassApp.GetRibbonBar()->FindByID(ID_BUTTON_REATTACH_PROC));
+    SHFILEINFOW sfi = { 0 };
+    if (SHGetFileInfoW(g_ProcessPath, 0, &sfi, sizeof(SHFILEINFOW), SHGFI_ICON | SHGFI_LARGEICON))
+        reattach_button->m_hIcon = sfi.hIcon;  
+}
+
+void CReattachButton::ResetIcon()
+{
+    CReattachButton* reattach_button = static_cast<CReattachButton*>(g_ReClassApp.GetRibbonBar()->FindByID(ID_BUTTON_REATTACH_PROC));
+    if (reattach_button->m_hIcon)
+        DestroyIcon(reattach_button->m_hIcon);
+    reattach_button->m_hIcon = nullptr;
+}
 
 /*
     Memory and module map info

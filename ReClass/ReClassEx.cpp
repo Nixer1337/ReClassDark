@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include <tlhelp32.h>
+#include <Psapi.h>
 
 #include "ReClassEx.h"
 
@@ -178,6 +179,8 @@ BOOL CReClassExApp::InitInstance( )
     g_bRTTI             = GetProfileInt( _T( "Misc" ), _T( "RTTI" ), g_bRTTI ) > 0 ? true : false;
     g_bRandomName       = GetProfileInt( _T( "Misc" ), _T( "RandomName" ), g_bRandomName ) > 0 ? true : false;
     g_bLoadModuleSymbol = GetProfileInt( _T( "Misc" ), _T( "LoadModuleSymbols" ), g_bLoadModuleSymbol ) > 0 ? true : false;
+    g_ProcessName       = GetProfileString(_T("Misc"), _T("ProcessName"));
+    g_ProcessPath       = GetProfileString(_T("Misc"), _T("ProcessPath"));
 
     g_bPrivatePadding   = GetProfileInt( _T( "Class Generation" ), _T( "PrivatePadding" ), g_bPrivatePadding ) > 0 ? true : false;
     g_bClipboardCopy    = GetProfileInt( _T( "Class Generation" ), _T( "ClipboardCopy" ), g_bClipboardCopy ) > 0 ? true : false;
@@ -266,6 +269,8 @@ BOOL CReClassExApp::InitInstance( )
     LoadPlugins( );
     OnButtonNewClass();
     SetWindowDarkMode(AfxGetMainWnd()->GetSafeHwnd());
+
+    CReattachButton::UpdateIcon();
 
     return TRUE;
 }
@@ -376,6 +381,10 @@ void CReClassExApp::OnButtonReattachProc()
 
                     g_hProcess = ReClassOpenProcess(PROCESS_ALL_ACCESS, FALSE, entry.th32ProcessID);
                     g_ProcessID = entry.th32ProcessID;
+                    TCHAR tcsProcessPath[MAX_PATH] = { 0 };
+                    GetModuleFileNameEx(g_hProcess, NULL, tcsProcessPath, MAX_PATH);
+                    g_ProcessPath = tcsProcessPath;
+                    CReattachButton::UpdateIcon();
                     UpdateMemoryMap();
                     break;
                 }
@@ -388,7 +397,7 @@ void CReClassExApp::OnButtonReattachProc()
 
 void CReClassExApp::OnUpdateButtonReattachProc(CCmdUI* pCmdUI)
 {
-    pCmdUI->Enable(!g_ProcessName.IsEmpty());
+    pCmdUI->Enable(!g_ProcessPath.IsEmpty());
 }
 
 void CReClassExApp::OnButtonReset( )
@@ -401,8 +410,7 @@ void CReClassExApp::OnButtonReset( )
     g_AttachedProcessAddress = NULL;
     g_ProcessName.Empty();
 
-    CMFCRibbonButtonEx* reattach_button = static_cast<CMFCRibbonButtonEx*>(GetRibbonBar()->FindByID(ID_BUTTON_REATTACH_PROC));
-    reattach_button->ResetIcon();
+    CReattachButton::ResetIcon();
 
     CMDIFrameWnd* pFrame = STATIC_DOWNCAST( CMDIFrameWnd, m_pMainWnd );
     CMDIChildWnd* pChildWnd = pFrame->MDIGetActive( );

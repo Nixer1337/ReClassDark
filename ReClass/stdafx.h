@@ -98,6 +98,7 @@ extern DWORD  g_ProcessID;
 extern ULONG_PTR g_AttachedProcessAddress;
 extern DWORD  g_AttachedProcessSize;
 extern CString g_ProcessName;
+extern CString g_ProcessPath;
 
 extern std::map<ULONG_PTR, struct MemMapInfo> g_MemMap;
 extern std::vector<struct MemMapInfo> g_MemMapCode;
@@ -250,20 +251,11 @@ ULONG_PTR ConvertStrToAddress( CString str );
 
 void SetWindowDarkMode(HWND hwnd);
 
-class CMFCRibbonButtonEx : public CMFCRibbonButton
+class CReattachButton : public CMFCRibbonButton
 {
 public:
-    void SetIcon(HICON icon)
-    {
-        m_hIcon = icon;
-        m_hIconSmall = icon;
-    }
-
-    void ResetIcon()
-    {
-        m_hIcon = nullptr;
-        m_hIconSmall = nullptr;
-    }
+    static void UpdateIcon();
+    static void ResetIcon();
 };
 
 // 
