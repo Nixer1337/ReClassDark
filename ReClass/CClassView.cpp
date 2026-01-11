@@ -193,9 +193,7 @@ int CClassView::OnCreate( LPCREATESTRUCT lpCreateStruct )
     m_HScroll.Create( SBS_HORZ, hrect, this, 0 );
     m_HScroll.EnableScrollBar( ESB_ENABLE_BOTH );
 
-    m_ToolTip.Create( ES_MULTILINE | WS_BORDER, rect, this, 1 );
-    m_ToolTip.SetFont( &g_ViewFont );
-    m_ToolTip.EnableWindow( FALSE );
+    m_ToolTip.Create( WS_BORDER, rect, this, 1 );
 
     SetWindowTheme(m_Scroll.GetSafeHwnd(), L"DarkMode_Explorer", nullptr);
     SetWindowTheme(m_HScroll.GetSafeHwnd(), L"DarkMode_Explorer", nullptr);
@@ -939,10 +937,9 @@ void CClassView::OnMouseHover( UINT nFlags, CPoint point )
         for (UINT i = 0; i < m_Selected.size( ); i++)
             size += m_Selected[i].Object->GetMemorySize( );
         msg.Format( _T( "%i selected, %d bytes" ), m_Selected.size( ), size );
-        m_ToolTip.EnableWindow( FALSE );
         m_ToolTip.SetWindowText( msg );
-        m_ToolTip.SetWindowPos( NULL, point.x + 16, point.y + 16, msg.GetLength( ) * g_FontWidth + 8, g_FontHeight + 6, SWP_NOZORDER );
-        m_ToolTip.ShowWindow( SW_SHOW );
+        m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, msg.GetLength( ) * g_FontWidth + 8, g_FontHeight + 6 );
+        m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
     }
     else
     {
@@ -1040,16 +1037,15 @@ void CClassView::OnMouseHover( UINT nFlags, CPoint point )
                                     textHeight += g_FontHeight;
                                 }
 
-                                m_ToolTip.EnableWindow( FALSE );
                                 #ifdef UNICODE
                                 m_ToolTip.SetWindowText( CA2W( strDisassembly ).m_psz );
                                 #else
                                 m_ToolTip.SetWindowText( strDisassembly.GetString( ) );
                                 #endif
                                 
-                                m_ToolTip.SetWindowPos( NULL, point.x + 16, point.y + 16, (longestLine + 1) * g_FontWidth, textHeight + g_FontHeight, SWP_NOZORDER );
+                                m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, (longestLine + 1) * g_FontWidth, textHeight + g_FontHeight );
 
-                                m_ToolTip.ShowWindow( SW_SHOW );
+                                m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
                             }
                             else
                             {
@@ -1060,33 +1056,76 @@ void CClassView::OnMouseHover( UINT nFlags, CPoint point )
                     }
                     else if (nodeType == nt_hex64)
                     {
-                        CString msg;
                         ReClassReadMemory( (LPVOID)m_Hotspots[i].Address, data, sizeof( __int64 ) );
-                        msg.Format( _T( "Int64: %i\r\nDWORD64: %u\r\nFloat: %.3f" ), *(__int64*)data, *(ULONG64*)data, *(float*)data );
-                        m_ToolTip.EnableWindow( FALSE );
-                        m_ToolTip.SetWindowText( msg );
-                        m_ToolTip.SetWindowPos( NULL, point.x + 16, point.y + 16, 200, 16 * 3 + 6, SWP_NOZORDER );
-                        m_ToolTip.ShowWindow( SW_SHOW );
+                        ULONG_PTR ptrValue = *(ULONG_PTR*)data;
+                        
+                        // Check if value is a valid pointer in target process memory map
+                        if (ptrValue > 0x10000 && IsMemory( ptrValue ))
+                        {
+                            CString addrName = GetAddressName( ptrValue, FALSE );
+                            // If GetAddressName returns something (module+offset or <CODE>/<DATA>), show rich tooltip
+                            if (addrName.GetLength() > 0)
+                            {
+                                ShowPointerTooltip( ptrValue, point );
+                            }
+                            else
+                            {
+                                CString msg;
+                                msg.Format( _T( "Int64: %I64d\r\nDWORD64: %I64u\r\nFloat: %.3f" ), *(__int64*)data, *(ULONG64*)data, *(float*)data );
+                                m_ToolTip.SetWindowText( msg );
+                                m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 25, g_FontHeight * 3 + 6 );
+                                m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
+                            }
+                        }
+                        else
+                        {
+                            CString msg;
+                            msg.Format( _T( "Int64: %I64d\r\nDWORD64: %I64u\r\nFloat: %.3f" ), *(__int64*)data, *(ULONG64*)data, *(float*)data );
+                            m_ToolTip.SetWindowText( msg );
+                            m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 25, g_FontHeight * 3 + 6 );
+                            m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
+                        }
                     }
                     else if (nodeType == nt_hex32)
                     {
-                        CString msg;
                         ReClassReadMemory( (LPVOID)m_Hotspots[i].Address, data, sizeof( __int32 ) );
-                        msg.Format( _T( "Int32: %i\r\nDWORD: %u\r\nFloat: %.3f" ), *(int*)data, *(DWORD*)data, *(float*)data );
-                        m_ToolTip.EnableWindow( FALSE );
-                        m_ToolTip.SetWindowText( msg );
-                        m_ToolTip.SetWindowPos( NULL, point.x + 16, point.y + 16, 200, 16 * 3 + 6, SWP_NOZORDER );
-                        m_ToolTip.ShowWindow( SW_SHOW );
+                        ULONG_PTR ptrValue = *(DWORD*)data;
+                        
+                        // Check if value is a valid pointer in target process memory map
+                        if (ptrValue > 0x10000 && IsMemory( ptrValue ))
+                        {
+                            CString addrName = GetAddressName( ptrValue, FALSE );
+                            // If GetAddressName returns something (module+offset or <CODE>/<DATA>), show rich tooltip
+                            if (addrName.GetLength() > 0)
+                            {
+                                ShowPointerTooltip( ptrValue, point );
+                            }
+                            else
+                            {
+                                CString msg;
+                                msg.Format( _T( "Int32: %i\r\nDWORD: %u\r\nFloat: %.3f" ), *(int*)data, *(DWORD*)data, *(float*)data );
+                                m_ToolTip.SetWindowText( msg );
+                                m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 25, g_FontHeight * 3 + 6 );
+                                m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
+                            }
+                        }
+                        else
+                        {
+                            CString msg;
+                            msg.Format( _T( "Int32: %i\r\nDWORD: %u\r\nFloat: %.3f" ), *(int*)data, *(DWORD*)data, *(float*)data );
+                            m_ToolTip.SetWindowText( msg );
+                            m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 25, g_FontHeight * 3 + 6 );
+                            m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
+                        }
                     }
                     else if (nodeType == nt_hex16)
                     {
                         CString msg;
                         ReClassReadMemory( (LPVOID)m_Hotspots[i].Address, data, sizeof( __int16 ) );
                         msg.Format( _T( "Int16: %i\r\nWORD: %u\r\n" ), *(__int16*)data, *(WORD*)data );
-                        m_ToolTip.EnableWindow( FALSE );
                         m_ToolTip.SetWindowText( msg );
-                        m_ToolTip.SetWindowPos( NULL, point.x + 16, point.y + 16, 200, 16 * 2 + 6, SWP_NOZORDER );
-                        m_ToolTip.ShowWindow( SW_SHOW );
+                        m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 20, g_FontHeight * 2 + 6 );
+                        m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
                     }
                     else if (nodeType == nt_hex8)
                     {
@@ -1094,8 +1133,15 @@ void CClassView::OnMouseHover( UINT nFlags, CPoint point )
                         ReClassReadMemory( (LPVOID)m_Hotspots[i].Address, data, sizeof( __int8 ) );
                         msg.Format( _T( "Int8: %i\r\nBYTE: %u\r\n" ), *(__int8*)data, *(UCHAR*)data );
                         m_ToolTip.SetWindowText( msg );
-                        m_ToolTip.SetWindowPos( NULL, point.x + 16, point.y + 16, 200, 16 * 2 + 6, SWP_NOZORDER );
-                        m_ToolTip.ShowWindow( SW_SHOW );
+                        m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 18, g_FontHeight * 2 + 6 );
+                        m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
+                    }
+                    else if (nodeType == nt_pointer || nodeType == nt_functionptr)
+                    {
+                        ULONG_PTR ptrValue = 0;
+                        ReClassReadMemory( (LPVOID)m_Hotspots[i].Address, &ptrValue, sizeof( ULONG_PTR ) );
+                        
+                        ShowPointerTooltip( ptrValue, point );
                     }
                 }
             }
@@ -1110,7 +1156,9 @@ void CClassView::OnMouseHover( UINT nFlags, CPoint point )
 
 void CClassView::OnMouseMove( UINT nFlags, CPoint point )
 {
-    if (point != m_HoverPoint)
+    // Hide tooltip only if mouse moved significantly (more than 2 pixels)
+    // This prevents flickering when mouse is slightly moving
+    if (abs(point.x - m_HoverPoint.x) > 2 || abs(point.y - m_HoverPoint.y) > 2)
         m_ToolTip.ShowWindow( SW_HIDE );
 
     if (m_bTracking == FALSE)
@@ -2248,4 +2296,101 @@ void CClassView::OnButtonSwap( )
 void CClassView::OnUpdateButtonSwap( CCmdUI *pCmdUI )
 {
     StandardTypeUpdate( pCmdUI );
+}
+
+void CClassView::ShowPointerTooltip( ULONG_PTR ptrValue, CPoint point )
+{
+    if (ptrValue == 0)
+        return;
+        
+    std::vector<TooltipLine> lines;
+    const int bytesPerRow = 8;
+    const int numRows = 8;
+    UCHAR ptrData[64];
+    
+    if (ReClassReadMemory( (LPVOID)ptrValue, ptrData, sizeof( ptrData ) ))
+    {
+        for (int row = 0; row < numRows; row++)
+        {
+            TooltipLine hexLine;
+            ULONG_PTR rowAddr = ptrValue + row * bytesPerRow;
+            int rowOffset = row * bytesPerRow;
+            
+            // Offset
+            CString offsetStr;
+            offsetStr.Format( _T( "%04X " ), rowOffset );
+            hexLine.Add( offsetStr, g_clrOffset );
+            
+            // Address
+            CString addrStr;
+            #ifdef _WIN64
+            addrStr.Format( _T( "%012I64X " ), rowAddr );
+            #else
+            addrStr.Format( _T( "%08X " ), rowAddr );
+            #endif
+            hexLine.Add( addrStr, g_clrAddress );
+            
+            // ASCII (before hex, like ClassView)
+            CString asciiPart;
+            for (int col = 0; col < bytesPerRow; col++)
+            {
+                int idx = row * bytesPerRow + col;
+                char ch = (ptrData[idx] >= 32 && ptrData[idx] < 127) ? (char)ptrData[idx] : '.';
+                asciiPart += ch;
+            }
+            asciiPart += _T( " " );
+            hexLine.Add( asciiPart, g_clrChar );
+            
+            // Hex bytes
+            for (int col = 0; col < bytesPerRow; col++)
+            {
+                int idx = row * bytesPerRow + col;
+                CString hexByte;
+                hexByte.Format( _T( "%02X " ), ptrData[idx] );
+                hexLine.Add( hexByte, g_clrHex );
+            }
+            
+            // Comment with float and int64 value (like Hex64)
+            float flVal = *(float*)&ptrData[rowOffset];
+            LONG_PTR intVal = *(LONG_PTR*)&ptrData[rowOffset];
+            
+            hexLine.Add( _T( "// " ), g_clrComment );
+            
+            CString valStr;
+            if (flVal > -99999.0f && flVal < 99999.0f)
+                valStr.Format( _T( "(%.3f) " ), flVal );
+            else
+                valStr.Format( _T( "(%.3f) " ), 0.0f );
+            hexLine.Add( valStr, g_clrValue );
+            
+            CString intStr;
+            #ifdef _WIN64
+            if (intVal > 0x6FFFFFFF && intVal < 0x7FFFFFFFFFFF)
+                intStr.Format( _T( "(%I64d|0x%I64X)" ), intVal, intVal );
+            else if (intVal == 0)
+                intStr.Format( _T( "(%I64d)" ), intVal );
+            else
+                intStr.Format( _T( "(%I64d|0x%X)" ), intVal, (DWORD)intVal );
+            #else
+            intStr.Format( _T( "(%d|0x%X)" ), intVal, intVal );
+            #endif
+            hexLine.Add( intStr, g_clrValue );
+            
+            lines.push_back( hexLine );
+        }
+    }
+    else
+    {
+        TooltipLine errLine;
+        errLine.Add( _T( "<Cannot read memory>" ), g_clrValue );
+        lines.push_back( errLine );
+    }
+    
+    m_ToolTip.SetFormattedText( lines );
+    #ifdef _WIN64
+    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 90, g_FontHeight * 8 + 8 );
+    #else
+    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 80, g_FontHeight * 8 + 8 );
+    #endif
+    m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
 }

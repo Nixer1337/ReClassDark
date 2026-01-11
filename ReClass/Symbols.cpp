@@ -154,6 +154,38 @@ BOOLEAN Symbols::Init( )
     return TRUE;
 }
 
+// Large system DLLs with huge PDBs (50+ MB) - skip by default to save time
+static const TCHAR* g_SkippedModules[] = {
+    _T( "combase.dll" ),           // ~200 MB
+    _T( "windows.storage.dll" ),   // ~150 MB
+    _T( "shell32.dll" ),           // ~120 MB
+    _T( "explorerframe.dll" ),     // ~100 MB
+    _T( "twinui.dll" ),            // ~100 MB
+    _T( "twinui.pcshell.dll" ),    // ~80 MB
+    _T( "kernelbase.dll" ),        // ~80 MB
+    _T( "edgehtml.dll" ),          // ~70 MB
+    _T( "msctf.dll" ),             // ~60 MB
+    _T( "oleaut32.dll" ),          // ~50 MB
+    _T( "windowscodecs.dll" ),     // ~50 MB
+    _T( "d3d11.dll" ),             // ~50 MB
+    _T( "dxgi.dll" ),              // ~40 MB
+};
+
+static BOOLEAN ShouldSkipModule( const CString& ModuleName )
+{
+    CString nameLower = ModuleName;
+    nameLower.MakeLower( );
+    
+    for (const auto& skip : g_SkippedModules)
+    {
+        CString skipLower = skip;
+        skipLower.MakeLower( );
+        if (nameLower == skipLower)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 BOOLEAN Symbols::LoadSymbolsForModule( CString ModulePath, ULONG_PTR ModuleBaseAddress, ULONG SizeOfModule )
 {
     int idx;
@@ -162,10 +194,27 @@ BOOLEAN Symbols::LoadSymbolsForModule( CString ModulePath, ULONG_PTR ModuleBaseA
     SymbolReader* pReader;
     BOOLEAN bSucc;
 
+    // Check if already loaded (under lock)
+    ntdll::RtlEnterCriticalSection( &m_CriticalSection );
+    auto existingIt = m_SymbolAddresses.find( ModuleBaseAddress );
+    if (existingIt != m_SymbolAddresses.end( ))
+    {
+        ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+        return TRUE; // Already loaded
+    }
+    ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+
     idx = ModulePath.ReverseFind( _T( '/' ) );
     if (idx == -1)
         idx = ModulePath.ReverseFind( _T( '\\' ) );
     ModuleName = ModulePath.Mid( ++idx );
+
+    // Skip large system DLLs with huge PDBs
+    if (ShouldSkipModule( ModuleName ))
+    {
+        PrintOut( _T( "[Symbols] Skipping %s (large system PDB)" ), ModuleName.GetString( ) );
+        return FALSE;
+    }
 
     if (!m_strSearchPath.IsEmpty( ))
         szSearchPath = m_strSearchPath.GetString( );
@@ -174,16 +223,32 @@ BOOLEAN Symbols::LoadSymbolsForModule( CString ModulePath, ULONG_PTR ModuleBaseA
 
     pReader = new SymbolReader( );
 
-    ntdll::RtlEnterCriticalSection( &m_CriticalSection );
-
+    // Load symbols OUTSIDE of critical section - this is the slow part!
+    PrintOut( _T( "[Symbols] Loading symbols for %s..." ), ModuleName.GetString( ) );
+    ULONGLONG startTime = GetTickCount64( );
+    
     bSucc = pReader->LoadFile( ModuleName, ModulePath, ModuleBaseAddress, SizeOfModule, szSearchPath );
-
-    ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+    
+    ULONGLONG elapsed = GetTickCount64( ) - startTime;
 
     if (bSucc)
     {
-        PrintOut( _T( "[Symbols::LoadSymbolsForModule] Symbols for module %s loaded" ), ModuleName.GetString( ) );
+        // Only hold lock for map insertion
+        ntdll::RtlEnterCriticalSection( &m_CriticalSection );
+        
+        // Double-check another thread didn't load while we were working
+        auto checkIt = m_SymbolAddresses.find( ModuleBaseAddress );
+        if (checkIt != m_SymbolAddresses.end( ))
+        {
+            ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+            delete pReader; // Another thread beat us
+            return TRUE;
+        }
+        
         m_SymbolAddresses.insert( std::make_pair( ModuleBaseAddress, pReader ) );
+        ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+        
+        PrintOut( _T( "[Symbols] Symbols for %s loaded in %llu ms" ), ModuleName.GetString( ), elapsed );
         return TRUE;
     }
 
@@ -205,21 +270,42 @@ BOOLEAN Symbols::LoadSymbolsForPdb( CString PdbPath )
         idx = PdbPath.ReverseFind( '\\' );
     PdbFileName = PdbPath.Mid( ++idx );
 
+    // Check if already loaded
+    ntdll::RtlEnterCriticalSection( &m_CriticalSection );
+    auto existingIt = m_SymbolNames.find( PdbFileName );
+    if (existingIt != m_SymbolNames.end( ))
+    {
+        ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+        return TRUE; // Already loaded
+    }
+    ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+
     if (!m_strSearchPath.IsEmpty( ))
         szSearchPath = m_strSearchPath.GetString( );
 
     reader = new SymbolReader( );
 
-    ntdll::RtlEnterCriticalSection( &m_CriticalSection );
-
+    // Load symbols OUTSIDE of critical section - this is the slow part!
     bSucc = reader->LoadFile( PdbFileName, PdbPath, 0, 0, szSearchPath );
-
-    ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
 
     if (bSucc)
     {
-        PrintOut( _T( "[Symbols::LoadSymbolsForPdb] Symbols for module %s loaded" ), PdbFileName.GetString( ) );
+        // Only hold lock for map insertion
+        ntdll::RtlEnterCriticalSection( &m_CriticalSection );
+        
+        // Double-check
+        auto checkIt = m_SymbolNames.find( PdbFileName );
+        if (checkIt != m_SymbolNames.end( ))
+        {
+            ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+            delete reader;
+            return TRUE;
+        }
+        
         m_SymbolNames.insert( std::make_pair( PdbFileName, reader ) );
+        ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
+        
+        PrintOut( _T( "[Symbols::LoadSymbolsForPdb] Symbols for module %s loaded" ), PdbFileName.GetString( ) );
         return TRUE;
     }
 
@@ -321,18 +407,22 @@ BOOLEAN Symbols::LoadSymbolsForPdb( CString PdbPath )
 SymbolReader* Symbols::GetSymbolsForModuleAddress( ULONG_PTR ModuleAddress )
 {
     SymbolReader* script = NULL;
+    ntdll::RtlEnterCriticalSection( &m_CriticalSection );
     auto iter = m_SymbolAddresses.find( ModuleAddress );
     if (iter != m_SymbolAddresses.end( ))
         script = iter->second;
+    ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
     return script;
 }
 
 SymbolReader* Symbols::GetSymbolsForModuleName( CString ModuleName )
 {
     SymbolReader* script = NULL;
+    ntdll::RtlEnterCriticalSection( &m_CriticalSection );
     auto iter = m_SymbolNames.find( ModuleName );
     if (iter != m_SymbolNames.end( ))
         script = iter->second;
+    ntdll::RtlLeaveCriticalSection( &m_CriticalSection );
     return script;
 }
 

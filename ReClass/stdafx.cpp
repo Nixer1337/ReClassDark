@@ -722,33 +722,52 @@ BOOLEAN UpdateMemoryMap( void )
                 IMAGE_DOS_HEADER DosHdr;
                 IMAGE_NT_HEADERS NtHdr;
 
-                ReClassReadMemory( ModuleBase, &DosHdr, sizeof( IMAGE_DOS_HEADER ), NULL );
-                ReClassReadMemory( ModuleBase + DosHdr.e_lfanew, &NtHdr, sizeof( IMAGE_NT_HEADERS ), NULL );
-                DWORD sectionsSize = (DWORD)NtHdr.FileHeader.NumberOfSections * sizeof( IMAGE_SECTION_HEADER );
-                PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER)malloc( sectionsSize );
-                ReClassReadMemory( ModuleBase + DosHdr.e_lfanew + sizeof( IMAGE_NT_HEADERS ), sections, sectionsSize, NULL );
-                for (int i = 0; i < NtHdr.FileHeader.NumberOfSections; i++)
+                if (ReClassReadMemory( ModuleBase, &DosHdr, sizeof( IMAGE_DOS_HEADER ), NULL ) &&
+                    DosHdr.e_magic == IMAGE_DOS_SIGNATURE)
                 {
-                    CString txt;
-                    MemMapInfo Mem;
-                    txt.Format( _T( "%.8s" ), sections[i].Name ); txt.MakeLower( );
-                    if (txt == ".text" || txt == "code")
+                    if (ReClassReadMemory( (LPVOID)((ULONG_PTR)ModuleBase + DosHdr.e_lfanew), &NtHdr, sizeof( IMAGE_NT_HEADERS ), NULL ) &&
+                        NtHdr.Signature == IMAGE_NT_SIGNATURE)
                     {
-                        Mem.Start = (ULONG_PTR)ModuleBase + sections[i].VirtualAddress;
-                        Mem.End = Mem.Start + sections[i].Misc.VirtualSize;
-                        Mem.Name = wcsModuleName;
-                        g_MemMapCode.push_back( Mem );
-                    }
-                    else if (txt == ".data" || txt == "data" || txt == ".rdata" || txt == ".idata")
-                    {
-                        Mem.Start = (ULONG_PTR)ModuleBase + sections[i].VirtualAddress;
-                        Mem.End = Mem.Start + sections[i].Misc.VirtualSize;
-                        Mem.Name = wcsModuleName;
-                        g_MemMapData.push_back( Mem );
+                        DWORD sectionsSize = (DWORD)NtHdr.FileHeader.NumberOfSections * sizeof( IMAGE_SECTION_HEADER );
+                        PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER)malloc( sectionsSize );
+                        
+                        // Correct offset: after NT headers + size of optional header
+                        ULONG_PTR sectionsOffset = (ULONG_PTR)ModuleBase + DosHdr.e_lfanew + 
+                            sizeof( DWORD ) + sizeof( IMAGE_FILE_HEADER ) + NtHdr.FileHeader.SizeOfOptionalHeader;
+                        
+                        if (ReClassReadMemory( (LPVOID)sectionsOffset, sections, sectionsSize, NULL ))
+                        {
+                            for (int i = 0; i < NtHdr.FileHeader.NumberOfSections; i++)
+                            {
+                                MemMapInfo Mem;
+                                // Section name is char[8], not unicode
+                                char sectionName[9] = { 0 };
+                                memcpy( sectionName, sections[i].Name, 8 );
+                                _strlwr_s( sectionName, 9 );
+                                
+                                if (strcmp( sectionName, ".text" ) == 0 || strcmp( sectionName, "code" ) == 0 ||
+                                    (sections[i].Characteristics & IMAGE_SCN_CNT_CODE) ||
+                                    (sections[i].Characteristics & IMAGE_SCN_MEM_EXECUTE))
+                                {
+                                    Mem.Start = (ULONG_PTR)ModuleBase + sections[i].VirtualAddress;
+                                    Mem.End = Mem.Start + sections[i].Misc.VirtualSize;
+                                    Mem.Name = wcsModuleName;
+                                    g_MemMapCode.push_back( Mem );
+                                }
+                                else if (strcmp( sectionName, ".data" ) == 0 || strcmp( sectionName, "data" ) == 0 || 
+                                         strcmp( sectionName, ".rdata" ) == 0 || strcmp( sectionName, ".idata" ) == 0)
+                                {
+                                    Mem.Start = (ULONG_PTR)ModuleBase + sections[i].VirtualAddress;
+                                    Mem.End = Mem.Start + sections[i].Misc.VirtualSize;
+                                    Mem.Name = wcsModuleName;
+                                    g_MemMapData.push_back( Mem );
+                                }
+                            }
+                        }
+                        // Free sections
+                        free( sections );
                     }
                 }
-                // Free sections
-                free( sections );
             }
 
         } while (pLdrListHead != pLdrCurrentNode);

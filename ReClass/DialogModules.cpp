@@ -9,6 +9,7 @@
 #include "afxdialogex.h"
 
 #include <algorithm>
+#include <thread>
 
 IMPLEMENT_DYNAMIC( CDialogModules, CDialogEx )
 
@@ -155,8 +156,23 @@ void CDialogModules::SetSelected( )
 
         MemMapInfo& mod = g_MemMapModules[nItem];
 
-        if (g_bSymbolResolution && m_SymbolLoad.GetCheck( ) == BST_CHECKED)
-            g_ReClassApp.m_pSymbolLoader->LoadSymbolsForModule( mod.Path, mod.Start, mod.Size );
+        if (g_bSymbolResolution && g_ReClassApp.m_pSymbolLoader && m_SymbolLoad.GetCheck( ) == BST_CHECKED)
+        {
+            // Load symbols in background thread to avoid UI freeze
+            CString modulePath = mod.Path;
+            ULONG_PTR moduleStart = mod.Start;
+            ULONG moduleSize = mod.Size;
+            CString moduleName = mod.Name;
+            
+            std::thread( [modulePath, moduleStart, moduleSize, moduleName]( ) {
+                CoInitializeEx( NULL, COINIT_MULTITHREADED );
+                if (g_ReClassApp.m_pSymbolLoader->LoadSymbolsForModule( modulePath, moduleStart, moduleSize ))
+                {
+                    PrintOut( _T( "Symbols loaded for %s" ), moduleName.GetString( ) );
+                }
+                CoUninitialize( );
+            } ).detach( );
+        }
 
         int extension_size = mod.Name.ReverseFind( '.' );
         extension_size = (extension_size == -1) ? 0 : (mod.Name.GetLength( ) - extension_size);

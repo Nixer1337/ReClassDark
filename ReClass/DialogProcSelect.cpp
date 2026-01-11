@@ -15,6 +15,84 @@
 #include <memory>
 #include <algorithm>
 #include <Psapi.h>
+#include <thread>
+#include <atomic>
+
+// Number of parallel symbol loading threads
+#define SYMBOL_LOAD_THREAD_COUNT 4
+
+// Symbol loading thread data for multi-threaded loading
+struct SymbolLoadThreadData
+{
+    std::vector<MemMapInfo> Modules;
+    std::atomic<int> NextIndex;          // Next module index to process
+    std::atomic<int> CompletedCount;     // Number of modules completed (success or fail)
+    std::atomic<int> LoadedCount;        // Number of modules successfully loaded
+    std::atomic<bool> CancelRequested;
+    std::atomic<int> ActiveThreads;      // Number of threads still running
+    CString CurrentModuleNames[SYMBOL_LOAD_THREAD_COUNT];  // Current module per thread
+    RTL_CRITICAL_SECTION NameLock;
+};
+
+static SymbolLoadThreadData* g_pSymbolLoadData = nullptr;
+
+// Worker thread function for loading symbols (multi-threaded version)
+static DWORD WINAPI SymbolLoadThreadProc( LPVOID lpParam )
+{
+    SymbolLoadThreadData* pData = (SymbolLoadThreadData*)lpParam;
+    
+    // Get thread index from param (stored in high bits of pointer for simplicity)
+    // Actually, let's use a different approach - atomic counter for thread ID
+    static std::atomic<int> threadIdCounter( 0 );
+    int threadId = threadIdCounter++ % SYMBOL_LOAD_THREAD_COUNT;
+    
+    // Initialize COM for this thread (required for DIA)
+    // Each thread needs its own COM initialization
+    HRESULT hr = CoInitializeEx( NULL, COINIT_APARTMENTTHREADED );
+    if (FAILED( hr ))
+    {
+        PrintOut( _T( "[SymbolLoader] Thread %d: COM init failed" ), threadId );
+        pData->ActiveThreads--;
+        return 1;
+    }
+    
+    int totalModules = (int)pData->Modules.size( );
+    
+    while (!pData->CancelRequested)
+    {
+        // Atomically grab next module index
+        int moduleIndex = pData->NextIndex.fetch_add( 1 );
+        
+        // Check if we've processed all modules
+        if (moduleIndex >= totalModules)
+            break;
+        
+        MemMapInfo& CurrentModule = pData->Modules[moduleIndex];
+        
+        // Update current module name for this thread (thread-safe)
+        ntdll::RtlEnterCriticalSection( &pData->NameLock );
+        pData->CurrentModuleNames[threadId] = CurrentModule.Name;
+        ntdll::RtlLeaveCriticalSection( &pData->NameLock );
+        
+        if (g_ReClassApp.m_pSymbolLoader->LoadSymbolsForModule( CurrentModule.Path, CurrentModule.Start, CurrentModule.Size ))
+        {
+            pData->LoadedCount++;
+        }
+        
+        pData->CompletedCount++;
+    }
+    
+    // Clear this thread's current module
+    ntdll::RtlEnterCriticalSection( &pData->NameLock );
+    pData->CurrentModuleNames[threadId].Empty( );
+    ntdll::RtlLeaveCriticalSection( &pData->NameLock );
+    
+    pData->ActiveThreads--;
+    
+    CoUninitialize( );
+    
+    return 0;
+}
 
 // CDialogProcSelect dialog
 
@@ -291,47 +369,126 @@ void CDialogProcSelect::OnAttachButton( )
 
                 UpdateMemoryMap( );
 
-                if (g_bSymbolResolution && m_LoadAllSymbols.GetCheck( ) == BST_CHECKED)
+                if (g_bSymbolResolution && g_ReClassApp.m_pSymbolLoader && m_LoadAllSymbols.GetCheck( ) == BST_CHECKED)
                 {
+                    // Close dialog first, then load symbols
                     OnClose( );
                 
                     MSG Msg;
                     CMFCStatusBar* StatusBar = g_ReClassApp.GetStatusBar( );
 
+                    // Prepare thread data
+                    SymbolLoadThreadData threadData;
+                    threadData.Modules.reserve( g_MemMapModules.size( ) );
+                    for (auto& mi : g_MemMapModules)
+                    {
+                        threadData.Modules.push_back( mi.second );
+                    }
+                    threadData.NextIndex = 0;
+                    threadData.CompletedCount = 0;
+                    threadData.LoadedCount = 0;
+                    threadData.CancelRequested = false;
+                    threadData.ActiveThreads = SYMBOL_LOAD_THREAD_COUNT;
+                    ntdll::RtlInitializeCriticalSection( &threadData.NameLock );
+                    
+                    for (int t = 0; t < SYMBOL_LOAD_THREAD_COUNT; t++)
+                        threadData.CurrentModuleNames[t].Empty( );
+                    
+                    g_pSymbolLoadData = &threadData;
+
+                    int totalModules = (int)threadData.Modules.size( );
+                    
                     CProgressBar ProgressBar( _T( "Progress" ), 100, 100, TRUE, 0, StatusBar );
                     ProgressBar.SetStep( 1 );
                     ProgressBar.SetText( _T( "Symbols loading: " ) );
+                    ProgressBar.SetRange32( 0, totalModules );
 
-                    int i = 0;
-                    for (auto mi : g_MemMapModules)
+                    // Start multiple worker threads
+                    HANDLE hThreads[SYMBOL_LOAD_THREAD_COUNT];
+                    int threadsCreated = 0;
+                    
+                    for (int t = 0; t < SYMBOL_LOAD_THREAD_COUNT; t++)
                     {
-                        TCHAR ProgressText[256];
-                        MemMapInfo* CurrentModule = &mi.second;
-
-                        ProgressBar.SetRange32( 0, (int)g_MemMapModules.size( ) );
-
-                        _stprintf_s( ProgressText, _T( "[%d/%d] %s" ), (UINT)i + 1, (UINT)g_MemMapModules.size( ), CurrentModule->Name.GetString( ) );
-                        StatusBar->SetPaneText( 1, ProgressText );
-
-                        //MemMapInfo* pCurrentModule = new MemMapInfo( CurrentModule );
-                        //Utils::NtCreateThread( LoadModuleSymbolsThread, pCurrentModule, 0 );
-
-                        if (!g_ReClassApp.m_pSymbolLoader->LoadSymbolsForModule( CurrentModule->Path, CurrentModule->Start, CurrentModule->Size ))
-                        {
-                            PrintOut( _T( "Failed to load symbols for %s" ), CurrentModule->Name.GetString( ) );
-                        }
-
-                        ProgressBar.StepIt( );
-
-                        // Peek and pump through messages to stop reclass from hanging
-                        while (::PeekMessage( &Msg, NULL, 0, 0, PM_NOREMOVE ))
-                        {
-                            if (!AfxGetApp( )->PumpMessage( ))
-                                ::PostQuitMessage( 0 );
-                        }
-                        i += 1;
+                        hThreads[t] = CreateThread( NULL, 0, SymbolLoadThreadProc, &threadData, 0, NULL );
+                        if (hThreads[t])
+                            threadsCreated++;
+                        else
+                            threadData.ActiveThreads--;
                     }
-
+                    
+                    if (threadsCreated > 0)
+                    {
+                        PrintOut( _T( "[SymbolLoader] Started %d parallel loading threads" ), threadsCreated );
+                        
+                        // Poll for progress while threads are running
+                        while (threadData.ActiveThreads > 0)
+                        {
+                            int completedCount = threadData.CompletedCount;
+                            
+                            // Build status string showing all active modules
+                            CString activeModules;
+                            ntdll::RtlEnterCriticalSection( &threadData.NameLock );
+                            for (int t = 0; t < SYMBOL_LOAD_THREAD_COUNT; t++)
+                            {
+                                if (!threadData.CurrentModuleNames[t].IsEmpty( ))
+                                {
+                                    if (!activeModules.IsEmpty( ))
+                                        activeModules += _T( ", " );
+                                    activeModules += threadData.CurrentModuleNames[t];
+                                }
+                            }
+                            ntdll::RtlLeaveCriticalSection( &threadData.NameLock );
+                            
+                            TCHAR ProgressText[512];
+                            _stprintf_s( ProgressText, _T( "[%d/%d] %s" ), completedCount, totalModules, activeModules.GetString( ) );
+                            StatusBar->SetPaneText( 1, ProgressText );
+                            
+                            ProgressBar.SetPos( completedCount );
+                            
+                            // Process messages to keep UI responsive
+                            while (::PeekMessage( &Msg, NULL, 0, 0, PM_REMOVE ))
+                            {
+                                // Check for cancel (ESC key or close)
+                                if (Msg.message == WM_KEYDOWN && Msg.wParam == VK_ESCAPE)
+                                {
+                                    threadData.CancelRequested = true;
+                                }
+                                
+                                TranslateMessage( &Msg );
+                                DispatchMessage( &Msg );
+                            }
+                            
+                            // Don't burn CPU - sleep a bit
+                            Sleep( 50 );
+                        }
+                        
+                        // Wait for all threads to finish
+                        WaitForMultipleObjects( threadsCreated, hThreads, TRUE, INFINITE );
+                        
+                        for (int t = 0; t < SYMBOL_LOAD_THREAD_COUNT; t++)
+                        {
+                            if (hThreads[t])
+                                CloseHandle( hThreads[t] );
+                        }
+                        
+                        int loadedCount = threadData.LoadedCount;
+                        
+                        if (threadData.CancelRequested)
+                        {
+                            PrintOut( _T( "Symbol loading cancelled. Loaded %d of %d modules" ), loadedCount, totalModules );
+                        }
+                        else
+                        {
+                            PrintOut( _T( "Symbols loaded for %d of %d modules" ), loadedCount, totalModules );
+                        }
+                    }
+                    else
+                    {
+                        PrintOut( _T( "Failed to create symbol loading threads!" ) );
+                    }
+                    
+                    ntdll::RtlDeleteCriticalSection( &threadData.NameLock );
+                    g_pSymbolLoadData = nullptr;
                     StatusBar->SetPaneText( 1, _T( "" ) );
 
                     return;

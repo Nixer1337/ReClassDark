@@ -1662,7 +1662,8 @@ void CReClassExApp::OnOpenPdb( )
     if (fileDlg.DoModal( ) != IDOK)
         return;
 
-    m_pSymbolLoader->LoadSymbolsForPdb( fileDlg.GetPathName( ) );
+    if (m_pSymbolLoader)
+        m_pSymbolLoader->LoadSymbolsForPdb( fileDlg.GetPathName( ) );
 }
 
 void CReClassExApp::OnUpdateOpenPdb( CCmdUI *pCmdUI )

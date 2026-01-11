@@ -18,6 +18,9 @@ public:
 protected:
     void UpdateHorisontalScroll(bool vertical_scroll_visible);
     virtual BOOL PreCreateWindow( CREATESTRUCT& cs );
+    
+    // Helper for pointer tooltip
+    void ShowPointerTooltip( ULONG_PTR ptrValue, CPoint point );
 
     // Implementation
 public:

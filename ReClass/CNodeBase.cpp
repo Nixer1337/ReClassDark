@@ -470,7 +470,7 @@ int CNodeBase::AddComment( const PVIEWINFO View, int x, int y )
                         x = ResolveRTTI( uintVal, x, View, y );
 
                     // Print out info from PDB at address
-                    if (g_bSymbolResolution)
+                    if (g_bSymbolResolution && g_ReClassApp.m_pSymbolLoader)
                     {
                         ULONG_PTR ModuleAddress = 0;
                         SymbolReader* pSymbols = NULL;
@@ -566,7 +566,7 @@ int CNodeBase::AddComment( const PVIEWINFO View, int x, int y )
                         x = ResolveRTTI( uintVal, x, View, y );
 
                     // Print out info from PDB at address
-                    if (g_bSymbolResolution)
+                    if (g_bSymbolResolution && g_ReClassApp.m_pSymbolLoader)
                     {
                         ULONG_PTR ModuleAddress = 0;
                         SymbolReader* pSymbols = NULL;

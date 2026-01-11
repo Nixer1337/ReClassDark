@@ -1,18 +1,69 @@
 #include "stdafx.h"
 #include "SymbolReader.h"
 
+// Function to create DIA source without COM registration
+static HRESULT NoRegCoCreate( const TCHAR* dllName, REFCLSID rclsid, REFIID riid, void** ppv )
+{
+    HRESULT hr = E_FAIL;
+    HMODULE hModule = LoadLibrary( dllName );
+    if (hModule == NULL)
+    {
+        // Try to find msdia140.dll in the same directory as the executable
+        TCHAR szPath[MAX_PATH];
+        GetModuleFileName( NULL, szPath, MAX_PATH );
+        TCHAR* pSlash = _tcsrchr( szPath, _T( '\\' ) );
+        if (pSlash)
+        {
+            *( pSlash + 1 ) = _T( '\0' );
+            _tcscat_s( szPath, MAX_PATH, dllName );
+            hModule = LoadLibrary( szPath );
+        }
+    }
+    
+    if (hModule == NULL)
+        return HRESULT_FROM_WIN32( GetLastError( ) );
+
+    typedef HRESULT( WINAPI* DllGetClassObjectFunc )(REFCLSID, REFIID, LPVOID*);
+    DllGetClassObjectFunc pDllGetClassObject = (DllGetClassObjectFunc)GetProcAddress( hModule, "DllGetClassObject" );
+    if (pDllGetClassObject == NULL)
+    {
+        return HRESULT_FROM_WIN32( GetLastError( ) );
+    }
+
+    IClassFactory* pClassFactory = NULL;
+    hr = pDllGetClassObject( rclsid, IID_IClassFactory, (LPVOID*)&pClassFactory );
+    if (SUCCEEDED( hr ))
+    {
+        hr = pClassFactory->CreateInstance( NULL, riid, ppv );
+        pClassFactory->Release( );
+    }
+
+    return hr;
+}
 
 SymbolReader::SymbolReader( ) 
     : m_bInitialized( FALSE )
     , m_pSource( NULL )
     , m_pSession( NULL )
+    , m_ModuleBase( 0 )
+    , m_ModuleSize( 0 )
 {
+    ntdll::RtlInitializeCriticalSection( &m_CacheLock );
 }
 
 SymbolReader::~SymbolReader( )
 {
     SAFE_RELEASE( m_pSession );
     SAFE_RELEASE( m_pSource );
+    ClearSymbolCache( );
+    ntdll::RtlDeleteCriticalSection( &m_CacheLock );
+}
+
+void SymbolReader::ClearSymbolCache( )
+{
+    ntdll::RtlEnterCriticalSection( &m_CacheLock );
+    m_SymbolCache.clear( );
+    ntdll::RtlLeaveCriticalSection( &m_CacheLock );
 }
 
 BOOLEAN SymbolReader::LoadSymbolData( const TCHAR* pszSearchPath )
@@ -21,18 +72,29 @@ BOOLEAN SymbolReader::LoadSymbolData( const TCHAR* pszSearchPath )
     DWORD dwMachType = 0;
     HRESULT hr = S_OK;
 
-    // Obtain access to the provider
+    // First try standard COM registration
     hr = CoCreateInstance( __uuidof( DiaSource ), NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS( &m_pSource ) );
     if (FAILED( hr ))
     {
-        PrintOutDbg( _T( "[LoadDataFromPdb] CoCreateInstance failed - HRESULT = %08X" ), hr );
-        return FALSE;
+        // Try to load msdia140.dll directly without COM registration
+        hr = NoRegCoCreate( _T( "msdia140.dll" ), __uuidof( DiaSource ), __uuidof( IDiaDataSource ), (void**)&m_pSource );
+        if (FAILED( hr ))
+        {
+            static bool bErrorShown = false;
+            if (!bErrorShown)
+            {
+                PrintOut( _T( "[Symbols] Failed to load DIA SDK. Place msdia140.dll next to ReClass or register it with regsvr32" ) );
+                bErrorShown = true;
+            }
+            return FALSE;
+        }
     }
 
     _wsplitpath_s( m_strFilePath.GetString( ), NULL, 0, NULL, 0, NULL, 0, szExt, MAX_PATH );
     if (!_wcsicmp( szExt, L".pdb" ))
     {
         // Open and prepare a program database (.pdb) file as a debug data source
+        PrintOut( _T( "  -> Loading local PDB: %s" ), m_strFilePath.GetString( ) );
         hr = m_pSource->loadDataFromPdb( m_strFilePath.GetString( ) );
         if (FAILED( hr ))
         {
@@ -44,6 +106,47 @@ BOOLEAN SymbolReader::LoadSymbolData( const TCHAR* pszSearchPath )
     else
     {
         // Open and prepare the debug data associated with the executable
+        // This may download PDB from symbol server - can be slow!
+        
+        // Warn about known large PDB files
+        CStringW fileNameLower = m_strFileName;
+        fileNameLower.MakeLower( );
+        
+        struct LargePdbInfo { const wchar_t* name; const wchar_t* size; };
+        static const LargePdbInfo largePdbs[] = {
+            { L"combase.dll", L"~200 MB" },
+            { L"windows.storage.dll", L"~150 MB" },
+            { L"shell32.dll", L"~120 MB" },
+            { L"explorerframe.dll", L"~100 MB" },
+            { L"kernelbase.dll", L"~80 MB" },
+            { L"msctf.dll", L"~60 MB" },
+            { L"oleaut32.dll", L"~50 MB" },
+            { L"user32.dll", L"~40 MB" },
+            { L"gdi32full.dll", L"~35 MB" },
+            { L"ucrtbase.dll", L"~30 MB" },
+            { L"ntdll.dll", L"~15 MB" },
+            { L"kernel32.dll", L"~10 MB" },
+        };
+        
+        const wchar_t* estimatedSize = nullptr;
+        for (const auto& info : largePdbs)
+        {
+            if (fileNameLower == info.name)
+            {
+                estimatedSize = info.size;
+                break;
+            }
+        }
+        
+        if (estimatedSize)
+        {
+            PrintOut( _T( "  -> Downloading PDB from symbol server (estimated %s - may take a while)..." ), estimatedSize );
+        }
+        else
+        {
+            PrintOut( _T( "  -> Searching/downloading PDB from symbol server..." ) );
+        }
+        
         if (!pszSearchPath)
         {
             hr = m_pSource->loadDataForExe( m_strFilePath.GetString( ), NULL, NULL );
@@ -59,6 +162,8 @@ BOOLEAN SymbolReader::LoadSymbolData( const TCHAR* pszSearchPath )
         
         if (FAILED( hr ))
         {
+            // Don't spam console for expected failures (no PDB available)
+            // Only log to debug output
             LPCTSTR errMsg = 0;
             switch (hr)
             {
@@ -83,9 +188,11 @@ BOOLEAN SymbolReader::LoadSymbolData( const TCHAR* pszSearchPath )
                 break;
             }
 
-            PrintOutDbg( _T( "[LoadDataFromPdb] loadDataForExe failed - %s" ), errMsg );
+            PrintOutDbg( _T( "[LoadDataFromPdb] loadDataForExe failed for %s - %s" ), m_strFileName.GetString(), errMsg );
             return FALSE;
         }
+        
+        PrintOut( _T( "  -> PDB found/downloaded successfully" ) );
     }
 
     // Open a session for querying symbols
@@ -94,6 +201,30 @@ BOOLEAN SymbolReader::LoadSymbolData( const TCHAR* pszSearchPath )
     {
         PrintOutDbg( _T( "[LoadDataFromPdb] openSession failed - HRESULT = %08X" ), hr );
         return FALSE;
+    }
+    
+    // Try to get info about loaded PDB
+    IDiaSymbol* pGlobalScope = NULL;
+    if (SUCCEEDED( m_pSession->get_globalScope( &pGlobalScope ) ) && pGlobalScope)
+    {
+        BSTR pdbPath = NULL;
+        if (SUCCEEDED( pGlobalScope->get_symbolsFileName( &pdbPath ) ) && pdbPath)
+        {
+            // Get file size
+            WIN32_FILE_ATTRIBUTE_DATA fileInfo;
+            if (GetFileAttributesExW( pdbPath, GetFileExInfoStandard, &fileInfo ))
+            {
+                ULONGLONG fileSize = ((ULONGLONG)fileInfo.nFileSizeHigh << 32) | fileInfo.nFileSizeLow;
+                double sizeMB = (double)fileSize / (1024.0 * 1024.0);
+                PrintOut( _T( "  -> PDB: %s (%.2f MB)" ), pdbPath, sizeMB );
+            }
+            else
+            {
+                PrintOut( _T( "  -> PDB: %s" ), pdbPath );
+            }
+            SysFreeString( pdbPath );
+        }
+        pGlobalScope->Release( );
     }
 
     return TRUE;
@@ -1007,8 +1138,12 @@ void SymbolReader::ReadSymbol( IDiaSymbol *pSymbol, CString& outString )
     //putwchar(L'\n');
 }
 
-BOOLEAN SymbolReader::GetSymbolStringFromVA( ULONG_PTR VirtualAddress, CString& outString )
+// Internal function that actually queries DIA - used by cached wrapper
+BOOLEAN SymbolReader::GetSymbolStringFromVA_Internal( ULONG_PTR VirtualAddress, CString& outString )
 {
+    if (!m_pSession)
+        return FALSE;
+        
     IDiaSymbol* pSymbol = NULL;
     LONG lDisplacement = 0;
 
@@ -1018,10 +1153,84 @@ BOOLEAN SymbolReader::GetSymbolStringFromVA( ULONG_PTR VirtualAddress, CString& 
     if (FAILED( m_pSession->findSymbolByRVAEx( (ULONG)SymbolRva, SymTagNull, &pSymbol, &lDisplacement ) ))
         return FALSE;
 
+    if (!pSymbol)
+        return FALSE;
+
     ReadSymbol( pSymbol, outString );
     pSymbol->Release( );
 
-    return TRUE;
+    return !outString.IsEmpty( );
+}
+
+// Cached wrapper for GetSymbolStringFromVA - avoids expensive DIA calls on repeated lookups
+BOOLEAN SymbolReader::GetSymbolStringFromVA( ULONG_PTR VirtualAddress, CString& outString )
+{
+    if (!m_bInitialized || !m_pSession)
+        return FALSE;
+
+    ULONGLONG currentTime = GetTickCount64( );
+    
+    // Try to find in cache first
+    ntdll::RtlEnterCriticalSection( &m_CacheLock );
+    
+    auto it = m_SymbolCache.find( VirtualAddress );
+    if (it != m_SymbolCache.end( ))
+    {
+        // Check if cache entry is still valid (not expired)
+        if ((currentTime - it->second.Timestamp) < SYMBOL_CACHE_EXPIRY_MS)
+        {
+            if (it->second.Valid)
+            {
+                outString = it->second.SymbolName;
+                ntdll::RtlLeaveCriticalSection( &m_CacheLock );
+                return TRUE;
+            }
+            else
+            {
+                // Cached negative result
+                ntdll::RtlLeaveCriticalSection( &m_CacheLock );
+                return FALSE;
+            }
+        }
+        // Entry expired, remove it
+        m_SymbolCache.erase( it );
+    }
+    
+    ntdll::RtlLeaveCriticalSection( &m_CacheLock );
+    
+    // Not in cache, do the actual lookup
+    CString symbolName;
+    symbolName.Preallocate( 512 );
+    BOOLEAN result = GetSymbolStringFromVA_Internal( VirtualAddress, symbolName );
+    
+    // Store result in cache
+    ntdll::RtlEnterCriticalSection( &m_CacheLock );
+    
+    // Limit cache size to prevent memory bloat
+    if (m_SymbolCache.size( ) >= SYMBOL_CACHE_MAX_SIZE)
+    {
+        // Remove oldest entries (simple strategy: clear half the cache)
+        size_t toRemove = SYMBOL_CACHE_MAX_SIZE / 2;
+        auto iter = m_SymbolCache.begin( );
+        while (toRemove > 0 && iter != m_SymbolCache.end( ))
+        {
+            iter = m_SymbolCache.erase( iter );
+            toRemove--;
+        }
+    }
+    
+    SymbolCacheEntry entry;
+    entry.SymbolName = symbolName;
+    entry.Timestamp = currentTime;
+    entry.Valid = result;
+    m_SymbolCache[VirtualAddress] = entry;
+    
+    ntdll::RtlLeaveCriticalSection( &m_CacheLock );
+    
+    if (result)
+        outString = symbolName;
+    
+    return result;
 }
 
 BOOLEAN SymbolReader::LoadFile( CString FilePath, ULONG_PTR dwBaseAddr, DWORD dwModuleSize, const TCHAR* pszSearchPath )

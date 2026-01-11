@@ -3,6 +3,19 @@
 #include <dia2.h>
 #include <tchar.h>
 #include <afxstr.h>
+#include <unordered_map>
+
+// Symbol cache entry
+struct SymbolCacheEntry
+{
+    CString SymbolName;
+    ULONGLONG Timestamp;
+    BOOLEAN Valid;
+};
+
+// Maximum number of cached symbol lookups
+#define SYMBOL_CACHE_MAX_SIZE 10000
+#define SYMBOL_CACHE_EXPIRY_MS 60000  // 1 minute
 
 // Basic types
 static const TCHAR* rgBaseType[] = {
@@ -163,9 +176,16 @@ public:
     BOOLEAN LoadFile( CString FileName, CString FilePath, ULONG_PTR dwBaseAddr, DWORD dwModuleSize, const TCHAR* pszSearchPath = 0 );
 
     BOOLEAN GetSymbolStringFromVA( ULONG_PTR VirtualAddress, CString& outString );
+    
+    // Cache management
+    void ClearSymbolCache( );
+    size_t GetCacheSize( ) const { return m_SymbolCache.size( ); }
 
 private:
     BOOLEAN LoadSymbolData( const TCHAR* pszSearchPath = 0 );
+    
+    // Internal cached lookup
+    BOOLEAN GetSymbolStringFromVA_Internal( ULONG_PTR VirtualAddress, CString& outString );
 
     void ReadSymTag( DWORD dwSymTag, CString& outString );
 
@@ -201,4 +221,8 @@ private:
     CStringW        m_strFilePath;
     ULONG_PTR       m_ModuleBase;
     ULONG           m_ModuleSize;
+    
+    // Symbol lookup cache to avoid repeated DIA calls
+    std::unordered_map<ULONG_PTR, SymbolCacheEntry> m_SymbolCache;
+    RTL_CRITICAL_SECTION m_CacheLock;
 };
