@@ -208,7 +208,15 @@ int CClassView::OnCreate( LPCREATESTRUCT lpCreateStruct )
 void CClassView::OnTimer( UINT_PTR nIDEvent )
 {
     if (nIDEvent == 1)
+    {
         CWnd::Invalidate( FALSE );
+        
+        // Update pointer tooltip if visible
+        if (m_ToolTip.IsWindowVisible() && m_TooltipPtrValue != 0)
+        {
+            ShowPointerTooltip( m_TooltipPtrValue, m_TooltipPoint );
+        }
+    }
 
     CWnd::OnTimer( nIDEvent );
 }
