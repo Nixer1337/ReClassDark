@@ -234,5 +234,13 @@ public:
     CScrollBar m_HScroll;
 
     bool isDeleting;
+
+    // Pointer tooltip scrolling state
+    ULONG_PTR m_TooltipPtrValue;
+    CPoint m_TooltipPoint;
+    int m_TooltipNumRows;
+    static const int TOOLTIP_MIN_ROWS = 10;
+    static const int TOOLTIP_MAX_ROWS = 64;
+    static const int TOOLTIP_DEFAULT_ROWS = 10;
 };
 

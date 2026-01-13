@@ -13,7 +13,9 @@
 // CChildView
 CClassView::CClassView( ) :
     m_pClass( NULL ),
-    m_bTracking( FALSE )
+    m_bTracking( FALSE ),
+    m_TooltipPtrValue( 0 ),
+    m_TooltipNumRows( TOOLTIP_DEFAULT_ROWS )
 {
 }
 
@@ -914,6 +916,31 @@ BOOL CClassView::OnEraseBkgnd( CDC* pDC )
 
 BOOL CClassView::OnMouseWheel( UINT nFlags, short zDelta, CPoint pt )
 {
+    // Check if pointer tooltip is visible and can be scrolled
+    if (m_ToolTip.IsWindowVisible() && m_TooltipPtrValue != 0)
+    {
+        // Adjust number of rows: scroll down = add row, scroll up = remove row
+        if (zDelta < 0)
+        {
+            // Scroll down - add a row (show more bytes)
+            if (m_TooltipNumRows < TOOLTIP_MAX_ROWS)
+            {
+                m_TooltipNumRows++;
+                ShowPointerTooltip( m_TooltipPtrValue, m_TooltipPoint );
+            }
+        }
+        else
+        {
+            // Scroll up - remove a row (show fewer bytes)
+            if (m_TooltipNumRows > TOOLTIP_MIN_ROWS)
+            {
+                m_TooltipNumRows--;
+                ShowPointerTooltip( m_TooltipPtrValue, m_TooltipPoint );
+            }
+        }
+        return TRUE;
+    }
+    
     if (m_Scroll.IsWindowVisible( ))
     {
         if (GetAsyncKeyState( VK_LCONTROL ))
@@ -922,6 +949,7 @@ BOOL CClassView::OnMouseWheel( UINT nFlags, short zDelta, CPoint pt )
             m_Scroll.SetScrollPos( m_Scroll.GetScrollPos( ) - ((int)zDelta / g_FontHeight) );
         m_Edit.ShowWindow( SW_HIDE );
         m_ToolTip.ShowWindow( SW_HIDE );
+        m_TooltipPtrValue = 0; // Reset pointer tooltip state
         Invalidate( );
     }
 
@@ -1159,7 +1187,10 @@ void CClassView::OnMouseMove( UINT nFlags, CPoint point )
     // Hide tooltip only if mouse moved significantly (more than 2 pixels)
     // This prevents flickering when mouse is slightly moving
     if (abs(point.x - m_HoverPoint.x) > 2 || abs(point.y - m_HoverPoint.y) > 2)
+    {
         m_ToolTip.ShowWindow( SW_HIDE );
+        m_TooltipPtrValue = 0; // Reset pointer tooltip state
+    }
 
     if (m_bTracking == FALSE)
     {
@@ -1177,6 +1208,7 @@ void CClassView::OnMouseMove( UINT nFlags, CPoint point )
 void CClassView::OnMouseLeave( )
 {
     m_ToolTip.ShowWindow( SW_HIDE );
+    m_TooltipPtrValue = 0; // Reset pointer tooltip state
     m_bTracking = FALSE;
     CWnd::OnMouseLeave( );
 }
@@ -2302,13 +2334,20 @@ void CClassView::ShowPointerTooltip( ULONG_PTR ptrValue, CPoint point )
 {
     if (ptrValue == 0)
         return;
+    
+    // Save tooltip state for scrolling
+    m_TooltipPtrValue = ptrValue;
+    m_TooltipPoint = point;
         
     std::vector<TooltipLine> lines;
     const int bytesPerRow = 8;
-    const int numRows = 8;
-    UCHAR ptrData[64];
+    const int numRows = m_TooltipNumRows;
+    const int totalBytes = numRows * bytesPerRow;
     
-    if (ReClassReadMemory( (LPVOID)ptrValue, ptrData, sizeof( ptrData ) ))
+    // Allocate dynamic buffer
+    std::vector<UCHAR> ptrData( totalBytes );
+    
+    if (ReClassReadMemory( (LPVOID)ptrValue, ptrData.data(), totalBytes ))
     {
         for (int row = 0; row < numRows; row++)
         {
@@ -2388,9 +2427,9 @@ void CClassView::ShowPointerTooltip( ULONG_PTR ptrValue, CPoint point )
     
     m_ToolTip.SetFormattedText( lines );
     #ifdef _WIN64
-    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 90, g_FontHeight * 8 + 8 );
+    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 90, g_FontHeight * numRows + 8 );
     #else
-    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 80, g_FontHeight * 8 + 8 );
+    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 80, g_FontHeight * numRows + 8 );
     #endif
     m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
 }
