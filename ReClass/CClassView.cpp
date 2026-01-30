@@ -2338,6 +2338,198 @@ void CClassView::OnUpdateButtonSwap( CCmdUI *pCmdUI )
     StandardTypeUpdate( pCmdUI );
 }
 
+// Helper to remangle RTTI name for proper demangling
+static CString RemangleRTTI( const CString& name )
+{
+    CString manglemore = _T("??_7") + name.Mid(3) + _T("6B@");
+    return manglemore;
+}
+
+// Helper function to get RTTI string for tooltip (without drawing)
+static CString GetRTTIString( ULONG_PTR Address )
+{
+#if defined(_M_AMD64)
+    ULONG_PTR ModuleBase = 0;
+    ULONG_PTR RTTIObjectLocatorPtr = 0;
+    ULONG_PTR RTTIObjectLocator = 0;
+    ULONG ClassHierarchyDescriptorOffset = 0;
+    ULONG_PTR ClassHierarchyDescriptor = 0;
+    ULONG NumBaseClasses = 0;
+    DWORD BaseClassArrayOffset = 0;
+    ULONG_PTR BaseClassArray = 0;
+    CString RttiString;
+
+    // Get module base that this address falls in
+    int indirections = -1;
+    while (++indirections < 8 && !((ModuleBase = GetModuleBaseFromAddress(Address)))) {
+        uintptr_t nextAddress = 0;
+        ReClassReadMemory((LPVOID)Address, &nextAddress, sizeof(ULONG_PTR));
+        Address = nextAddress;
+    }
+
+    RTTIObjectLocatorPtr = Address - sizeof( ULONG64 );
+    if (!IsValidPtr( RTTIObjectLocatorPtr ))
+        return _T("");
+
+    ReClassReadMemory( (LPVOID)RTTIObjectLocatorPtr, &RTTIObjectLocator, sizeof( ULONG_PTR ) );
+    ReClassReadMemory( (LPVOID)(RTTIObjectLocator + 0x10), &ClassHierarchyDescriptorOffset, sizeof( ULONG ) );
+
+    ClassHierarchyDescriptor = ModuleBase + ClassHierarchyDescriptorOffset;
+    if (!IsValidPtr( ClassHierarchyDescriptor ) || !ClassHierarchyDescriptorOffset)
+        return _T("");
+
+    ReClassReadMemory( (LPVOID)(ClassHierarchyDescriptor + 0x8), &NumBaseClasses, sizeof( ULONG ) );
+    if (NumBaseClasses < 0 || NumBaseClasses > 25)
+        NumBaseClasses = 0;
+
+    ReClassReadMemory( (LPVOID)(ClassHierarchyDescriptor + 0xC), &BaseClassArrayOffset, sizeof( ULONG ) );
+
+    BaseClassArray = ModuleBase + BaseClassArrayOffset;
+    if (!IsValidPtr( BaseClassArray ) || !BaseClassArrayOffset)
+        return _T("");
+
+    if (!indirections)
+        RttiString += _T("vtable for ");
+    else for (int i = 0; i < indirections; ++i)
+        RttiString += _T("pointer to ");
+
+    for (ULONG i = 0; i < NumBaseClasses; i++)
+    {
+        ULONG BaseClassDescriptorOffset = 0;
+        ULONG_PTR BaseClassDescriptor = 0;
+        ULONG TypeDescriptorOffset = 0;
+        ULONG_PTR TypeDescriptor = 0;
+
+        if (i == 1)
+            RttiString += _T( ": " );
+        else if (i > 1)
+            RttiString += _T( ", " );
+
+        ReClassReadMemory( (LPVOID)(BaseClassArray + (sizeof( ULONG ) * i)), &BaseClassDescriptorOffset, sizeof( ULONG ) );
+
+        BaseClassDescriptor = ModuleBase + BaseClassDescriptorOffset;
+        if (!IsValidPtr( BaseClassDescriptor ) || !BaseClassDescriptorOffset)
+            continue;
+
+        ReClassReadMemory( (LPVOID)BaseClassDescriptor, &TypeDescriptorOffset, sizeof( ULONG ) );
+
+        TypeDescriptor = ModuleBase + TypeDescriptorOffset;
+        if (!IsValidPtr( TypeDescriptor ) || !TypeDescriptorOffset)
+            continue;
+
+        CString RTTIName;
+        BOOLEAN FoundEnd = FALSE;
+        for (int j = 1; j < 512; j++)
+        {
+            CHAR RTTINameChar;
+            ReClassReadMemory( (LPVOID)(TypeDescriptor + 0x10 + j), &RTTINameChar, 1 );
+
+            if (!RTTINameChar) {
+                if (RTTIName.Right(2) == _T("@@")) FoundEnd = TRUE;
+                break;
+            }
+
+            RTTIName += RTTINameChar;
+        }
+
+        if (FoundEnd == TRUE)
+        {
+            TCHAR Demangled[MAX_PATH] = { 0 };
+            if (_UnDecorateSymbolName( RemangleRTTI(RTTIName), Demangled, MAX_PATH, UNDNAME_NAME_ONLY ) != 0)
+            {
+                CString PostProcessing(Demangled);
+                PostProcessing.Replace(_T("::`vftable'"), _T(""));
+                RttiString += PostProcessing;
+            }
+            else
+            {
+                RttiString += RTTIName;
+            }
+        }
+    }
+    return RttiString;
+#else
+    // 32-bit implementation
+    ULONG_PTR RTTIObjectLocatorPtr = 0;
+    ULONG_PTR RTTIObjectLocator = 0;
+    ULONG_PTR ClassHierarchyDescriptorPtr = 0;
+    ULONG_PTR ClassHierarchyDescriptor = 0;
+    ULONG NumBaseClasses = 0;
+    ULONG_PTR BaseClassArrayPtr = 0;
+    ULONG_PTR BaseClassArray = 0;
+    CString RttiString;
+
+    RTTIObjectLocatorPtr = Address - sizeof( ULONG );
+    if (!IsValidPtr( RTTIObjectLocatorPtr ))
+        return _T("");
+
+    ReClassReadMemory( (LPVOID)RTTIObjectLocatorPtr, &RTTIObjectLocator, sizeof( ULONG_PTR ) );
+
+    ClassHierarchyDescriptorPtr = RTTIObjectLocator + 0x10;
+    if (!IsValidPtr( ClassHierarchyDescriptorPtr ))
+        return _T("");
+
+    ReClassReadMemory( (LPVOID)ClassHierarchyDescriptorPtr, &ClassHierarchyDescriptor, sizeof( ULONG_PTR ) );
+    ReClassReadMemory( (LPVOID)(ClassHierarchyDescriptor + 0x8), &NumBaseClasses, sizeof( ULONG ) );
+    if (NumBaseClasses < 0 || NumBaseClasses > 25)
+        NumBaseClasses = 0;
+
+    BaseClassArrayPtr = ClassHierarchyDescriptor + 0xC;
+    if (!IsValidPtr( BaseClassArrayPtr ))
+        return _T("");
+
+    ReClassReadMemory( (LPVOID)BaseClassArrayPtr, &BaseClassArray, sizeof( ULONG_PTR ) );
+    
+    for (ULONG i = 0; i < NumBaseClasses; i++)
+    {
+        ULONG_PTR BaseClassDescriptorPtr = 0;
+        ULONG_PTR BaseClassDescriptor = 0;
+        ULONG_PTR TypeDescriptor = 0;
+
+        if (i != 0 && i != NumBaseClasses)
+            RttiString += _T(" : ");
+
+        BaseClassDescriptorPtr = BaseClassArray + (4 * i);
+        if (!IsValidPtr( BaseClassDescriptorPtr ))
+            continue;
+
+        ReClassReadMemory( (LPVOID)BaseClassDescriptorPtr, &BaseClassDescriptor, sizeof( ULONG_PTR ) );
+        if (!IsValidPtr( BaseClassDescriptor ))
+            continue;
+
+        ReClassReadMemory( (LPVOID)BaseClassDescriptor, &TypeDescriptor, sizeof( ULONG_PTR ) );
+
+        CString RTTIName;
+        BOOLEAN FoundEnd = FALSE;
+        CHAR LastChar = ' ';
+
+        for (int j = 1; j < 45; j++)
+        {
+            CHAR RTTINameChar;
+            ReClassReadMemory( (LPVOID)(TypeDescriptor + 0x08 + j), &RTTINameChar, 1 );
+            if (RTTINameChar == '@' && LastChar == '@')
+            {
+                FoundEnd = TRUE;
+                RTTIName += RTTINameChar;
+                break;
+            }
+            RTTIName += RTTINameChar;
+            LastChar = RTTINameChar;
+        }
+
+        if (FoundEnd == TRUE)
+        {
+            TCHAR Demangled[256] = { 0 };
+            if (_UnDecorateSymbolName( RTTIName.GetString(), Demangled, 256, UNDNAME_NAME_ONLY ) == 0)
+                RttiString += RTTIName.GetString();
+            else
+                RttiString += Demangled;
+        }
+    }
+    return RttiString;
+#endif
+}
+
 void CClassView::ShowPointerTooltip( ULONG_PTR ptrValue, CPoint point )
 {
     if (ptrValue == 0)
@@ -2405,9 +2597,9 @@ void CClassView::ShowPointerTooltip( ULONG_PTR ptrValue, CPoint point )
             
             CString valStr;
             if (flVal > -99999.0f && flVal < 99999.0f)
-                valStr.Format( _T( "(%.3f) " ), flVal );
+                valStr.Format( _T( "(%.3f)" ), flVal );
             else
-                valStr.Format( _T( "(%.3f) " ), 0.0f );
+                valStr.Format( _T( "(%.3f)" ), 0.0f );
             hexLine.Add( valStr, g_clrValue );
             
             CString intStr;
@@ -2423,6 +2615,53 @@ void CClassView::ShowPointerTooltip( ULONG_PTR ptrValue, CPoint point )
             #endif
             hexLine.Add( intStr, g_clrValue );
             
+            // Show *-> pointer name if valid pointer, and RTTI info
+            #ifdef _WIN64
+            ULONG_PTR ptrVal = *(ULONG_PTR*)&ptrData[rowOffset];
+            if (ptrVal > 0x6FFFFFFF && ptrVal < 0x7FFFFFFFFFFF)
+            {
+                CString strAddress = GetAddressName( ptrVal, FALSE );
+                if (strAddress.GetLength() > 0)
+                {
+                    CString ptrStr;
+                    ptrStr.Format( _T( "*->%s " ), strAddress.GetString() );
+                    hexLine.Add( ptrStr, g_clrOffset );
+                    
+                    // Add RTTI info if available
+                    if (g_bRTTI)
+                    {
+                        CString rttiStr = GetRTTIString( ptrVal );
+                        if (rttiStr.GetLength() > 0)
+                        {
+                            hexLine.Add( rttiStr, g_clrOffset );
+                        }
+                    }
+                }
+            }
+            #else
+            ULONG_PTR ptrVal = *(ULONG_PTR*)&ptrData[rowOffset];
+            if (ptrVal > 0x400000 && ptrVal < 0x110000000)
+            {
+                CString strAddress = GetAddressName( ptrVal, FALSE );
+                if (strAddress.GetLength() > 0)
+                {
+                    CString ptrStr;
+                    ptrStr.Format( _T( "*->%s " ), strAddress.GetString() );
+                    hexLine.Add( ptrStr, g_clrOffset );
+                    
+                    // Add RTTI info if available
+                    if (g_bRTTI)
+                    {
+                        CString rttiStr = GetRTTIString( ptrVal );
+                        if (rttiStr.GetLength() > 0)
+                        {
+                            hexLine.Add( rttiStr, g_clrOffset );
+                        }
+                    }
+                }
+            }
+            #endif
+            
             lines.push_back( hexLine );
         }
     }
@@ -2435,9 +2674,9 @@ void CClassView::ShowPointerTooltip( ULONG_PTR ptrValue, CPoint point )
     
     m_ToolTip.SetFormattedText( lines );
     #ifdef _WIN64
-    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 90, g_FontHeight * numRows + 8 );
+    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 160, g_FontHeight * numRows + 8 );
     #else
-    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 80, g_FontHeight * numRows + 8 );
+    m_ToolTip.SetPositionAndSize( point.x + 16, point.y + 16, g_FontWidth * 130, g_FontHeight * numRows + 8 );
     #endif
     m_ToolTip.ShowWindow( SW_SHOWNOACTIVATE );
 }
